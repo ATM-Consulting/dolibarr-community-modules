@@ -41,7 +41,7 @@ abstract class AbstractPDPProvider
 	/** @var array Provider configuration parameters */
 	protected $config = [];
 
-	/** @var array OAuth token information */
+	/** @var array<string,null|int|string> OAuth token information */
 	protected $tokenData = [];
 
 	/** @var AbstractProtocol Exchange protocol */
@@ -92,7 +92,7 @@ abstract class AbstractPDPProvider
 	/**
 	 * Get current token in memory (loaded by fetchOAuthTokenDB in constructor)
 	 *
-	 * @return mixed	Token
+	 * @return array<string,null|int|string>	Token
 	 */
 	public function getTokenData()
 	{
@@ -209,7 +209,7 @@ abstract class AbstractPDPProvider
 	 * @param $docType 		The type of document we want to return
 	 * @param $callType		The type of call to use when calling API
 	 *
-	 * @return array{status_code:int,response:null|string|array<string,mixed>,?errorCode:string,?errorMessage:string,?id:int,?call_id:string}
+	 * @return array{status_code:int,response:null|string|array<string,mixed>,errorCode?:string,errorMessage?:string,id?:int,call_id?:string}
 	 */
 	public function fetchFlowData($flowId, $docType, $callType = '')
 	{
@@ -248,12 +248,12 @@ abstract class AbstractPDPProvider
 	 * Call the provider API.
 	 *
 	 * @param string 						$resource 	    Resource relative URL ('Flows', 'healthcheck' or others)
-	 * @param string                        $method         HTTP method ('GET', 'POST', etc.)
-	 * @param array<string, mixed>|false 	$options 	    Options for the request
+	 * @param 'POST'|'GET'|'HEAD'|'PUT'|'PUTALREADYFORMATED'|'POSTALREADYFORMATED'|'DELETE' $method         HTTP method (dolibarr's types)
+	 * @param string|false 	$options 	    Options for the request (JSON encoded)
 	 * @param array<string, string>         $extraHeaders   Optional additional headers
 	 * @param string|null                   $callType       Functional type of the API call for logging purposes (e.g., 'sync_flows', 'send_invoice')
 	 *
-	 * @return array{status_code:int,response:null|string|array<string,mixed>,call_id:null|string}
+	 * @return array{status_code:int,response:null|string|array<string,mixed|array<string,mixed>>,call_id:null|string}
 	 */
 	abstract public function callApi($resource, $method, $options = false, $extraHeaders = [], $callType = '');
 
@@ -366,7 +366,7 @@ abstract class AbstractPDPProvider
 	/**
 	 * Retrieve OAuth token for the given PDP service.
 	 *
-	 * @return array|false   Array with keys 'access_token', 'refresh_token', 'expire_at', or false if not found
+	 * @return array{token:string,refresh_token:string,token_expires_at:string}|false   Array with keys 'access_token', 'refresh_token', 'expire_at', or false if not found
 	 */
 	public function fetchOAuthTokenDB()
 	{
@@ -411,9 +411,9 @@ abstract class AbstractPDPProvider
 		$obj = $db->fetch_object($resql);
 
 		return [
-			'token' => $obj->tokenstring,
-			'refresh_token' => $obj->tokenstring_refresh,
-			'token_expires_at' => $db->jdate($obj->expire_at, 'gmt')
+			'token' => (string) $obj->tokenstring,
+			'refresh_token' => (string) $obj->tokenstring_refresh,
+			'token_expires_at' => (string) $db->jdate($obj->expire_at, 'gmt')
 		];
 	}
 

@@ -27,7 +27,7 @@ use OAuth\OAuth2\Token\StdOAuth2Token;
 /**
  * Prepare admin pages header
  *
- * @return array
+ * @return array<int,array{0:string,1:string,2:string}>
  */
 function helloassoAdminPrepareHead()
 {
@@ -170,7 +170,7 @@ function helloassoDeleteToken()
 /**
  * Connect to helloasso database
  *
- * @return array|int 	An array with the token_type and the access_token defined if OK or -1 if KO
+ * @return array<string,mixed>|int 	An array with the token_type and the access_token defined if OK or -1 if KO
  */
 function helloassoDoConnection()
 {
@@ -249,7 +249,7 @@ function helloassoDoConnection()
  * @param	$source 		The type of the object
  * @param	$ref			The ref of the object
  * @param	$mode			The mode to use for the function (amount or payer)
- * @param	$payerarray		An array to fill the payer informations (Must be set with payer mode)
+ * @param	$payerarray		An array to fill the payer information (Must be set with payer mode)
  *
  * @return	int				The amount to pay if mode amount or fill $payerarray for payer mode
  */

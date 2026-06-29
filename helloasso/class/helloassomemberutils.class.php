@@ -224,7 +224,7 @@ class HelloAssoMemberUtils
 		$assoslug = str_replace('_', '-', dol_string_nospecial(strtolower(dol_string_unaccent($this->organization_slug)), '-'));
 		$formslug = str_replace('_', '-', dol_string_nospecial(strtolower(dol_string_unaccent($this->form_slug)), '-'));
 		$urlforform = "https://".urlencode($this->helloasso_url)."/v5/organizations/".urlencode($assoslug)."/forms/Membership/".urlencode($formslug).'/public';
-		dol_syslog("Send Get to url=".$urlforform.", to get HelloAsso Member type informations", LOG_DEBUG);
+		dol_syslog("Send Get to url=".$urlforform.", to get HelloAsso Member type information", LOG_DEBUG);
 
 		$ret = getURLContent($urlforform, 'GET', "", 1, $headers);
 		if ($ret["http_code"] != 200) {
@@ -373,23 +373,23 @@ class HelloAssoMemberUtils
 					if (!$error) {
 						dol_syslog(get_class($this)."::helloassoPostMembersToDolibarr  Subscription creation", LOG_DEBUG);
 						$date_start_subscription = dol_stringtotime($newmember->order->meta->createdAt);
-						$date_end_subscription = dol_time_plus_duree($date_start_subscription, $membertype->duration_value, $membertype->duration_unit);
-						if ($jsonmembertype->validityType == "Custom") {
+						$date_end_subscription = dol_time_plus_duree((int) $date_start_subscription, $membertype->duration_value, $membertype->duration_unit);
+						/*if ($jsonmembertype->validityType == "Custom") {
 							$date_start_subscription = dol_stringtotime($jsonmembertype->startDate);
 							$date_end_subscription = dol_stringtotime($jsonmembertype->endDate);
-						} else {
-							$result = $member->fetch_subscriptions();
-							if ($result <= 0) {
-								$this->error = $member->error;
-								$this->errors = array_merge($member->errors, $this->errors);
-								$error++;
-							}
-							if (!empty($member->last_subscription_date_end)) {
-								$date_start_subscription = $member->last_subscription_date_end;
-								$date_end_subscription = dol_time_plus_duree($date_start_subscription, $membertype->duration_value, $membertype->duration_unit);
-							}
+						} else { */
+						$result = $member->fetch_subscriptions();
+						if ($result <= 0) {
+							$this->error = $member->error;
+							$this->errors = array_merge($member->errors, $this->errors);
+							$error++;
 						}
-						$subscriptionid = $member->subscription($date_start_subscription, $amount, 0, '', '', '', '', '', $date_end_subscription, $dolibarrmembertype);
+						if (!empty($member->last_subscription_date_end)) {
+							$date_start_subscription = $member->last_subscription_date_end;
+							$date_end_subscription = dol_time_plus_duree($date_start_subscription, $membertype->duration_value, $membertype->duration_unit);
+						}
+						//}
+						$subscriptionid = $member->subscription((int) $date_start_subscription, $amount, 0, '', '', '', '', '', $date_end_subscription, $dolibarrmembertype);
 						if ($subscriptionid <= 0) {
 							$this->error = $member->error;
 							$this->errors = array_merge($member->errors, $this->errors);
@@ -584,7 +584,7 @@ class HelloAssoMemberUtils
 	}
 
 	/**
-	 * Set array of correspondance between HelloAsso and Dolibarr member type
+	 * Set array of correspondence between HelloAsso and Dolibarr member type
 	 *
 	 * @param   int   $dolibarrmembertype     Id of member type in Dolibarr
 	 * @param   int   $helloassomembertype    Id of member type in HelloAsso
@@ -618,9 +618,9 @@ class HelloAssoMemberUtils
 	}
 
 	 /**
-	 * Set array of correspondance between HelloAsso custom fields and Dolibarr fields
+	 * Set array of correspondence between HelloAsso custom fields and Dolibarr fields
 	 *
-	 * @param   string   $dolibarrfield          Dolibar field of member object
+	 * @param   string   $dolibarrfield          Dolibarr field of member object
 	 * @param   string   $helloassofield         HelloAsso custom field name
 	 *
 	 * @return  int   >0 if Ok, <0 if Ko
