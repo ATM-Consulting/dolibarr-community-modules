@@ -90,6 +90,17 @@ class PDPProviderManager
 				'is_enabled' => 0,
 				'prod_account_admin_url' => 'https://example.com',
 				'test_account_admin_url' => 'https://example.com',
+			),
+			'SUMMEO' => array(
+				'class' => 'SummeoPDPProvider',
+				'position' => 30,
+				'provider_countries' => array('FR'),
+				'provider_name' => picto_from_langcode('FR').' Summeo',
+				'description' => 'Summeo PDP Integration',
+				'is_enabled' => 1,
+				// TODO -> confirmer les URLs d'administration de compte Summeo
+				'prod_account_admin_url' => 'https://www.summeo.fr/',
+				'test_account_admin_url' => 'https://www.summeo.fr/',
 			)
 		);
 
