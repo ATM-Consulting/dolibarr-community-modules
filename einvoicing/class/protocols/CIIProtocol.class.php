@@ -33,6 +33,10 @@ require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/discount.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
 
+if ((float) DOL_VERSION < 18) {
+	dol_include_once('/einvoicing/compat/functions.lib.php');
+}
+
 dol_include_once('einvoicing/class/protocols/AbstractProtocol.class.php');
 dol_include_once('einvoicing/class/protocols/CommonProtocol.class.php');
 dol_include_once('einvoicing/class/einvoicing.class.php');
