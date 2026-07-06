@@ -12650,35 +12650,35 @@ namespace {
         public function loadDataForCustomReports($parameters, &$action, $hookmanager)
         {
         	global $langs;
-        
+
         	$langs->load("mymodule@mymodule");
-        
+
         	$this->results = array();
-        
+
         	$head = array();
         	$h = 0;
-        
+
         	if ($parameters['tabfamily'] == 'mymodule') {
         		$head[$h][0] = dol_buildpath('/module/index.php', 1);
         		$head[$h][1] = $langs->trans("Home");
         		$head[$h][2] = 'home';
         		$h++;
-        
+
         		$this->results['title'] = $langs->trans("MyModule");
         		$this->results['picto'] = 'mymodule@mymodule';
         	}
-        
+
         	$head[$h][0] = 'customreports.php?objecttype='.$parameters['objecttype'].(empty($parameters['tabfamily']) ? '' : '&tabfamily='.$parameters['tabfamily']);
         	$head[$h][1] = $langs->trans("CustomReports");
         	$head[$h][2] = 'customreports';
-        
+
         	$this->results['head'] = $head;
-        
+
         	$arrayoftypes = array();
         	//$arrayoftypes['mymodule_myobject'] = array('label' => 'MyObject', 'picto'=>'myobject@mymodule', 'ObjectClassName' => 'MyObject', 'enabled' => isModEnabled('mymodule'), 'ClassPath' => "/mymodule/class/myobject.class.php", 'langs'=>'mymodule@mymodule')
-        
+
         	$this->results['arrayoftype'] = $arrayoftypes;
-        
+
         	return 0;
         }
         */
@@ -32164,41 +32164,41 @@ namespace {
         /*public function createFromClone(User $user, $fromid)
         	{
         		dol_syslog(__METHOD__, LOG_DEBUG);
-        
+
         		$error = 0;
         		$object = new Cchargesociales($this->db);
-        
+
         		$this->db->begin();
-        
+
         		// Load source object
         		$object->fetch($fromid);
         		// Reset object
         		$object->id = 0;
-        
+
         		// Clear fields
         		// ...
-        
+
         		// Create clone
         		$this->context['createfromclone'] = 'createfromclone';
         		$result = $object->create($user);
-        
+
         		// Other options
         		if ($result < 0) {
         			$error++;
         			$this->errors = $object->errors;
         			dol_syslog(__METHOD__.' '.implode(',', $this->errors), LOG_ERR);
         		}
-        
+
         		unset($this->context['createfromclone']);
-        
+
         		// End
         		if (!$error) {
         			$this->db->commit();
-        
+
         			return $object->id;
         		} else {
         			$this->db->rollback();
-        
+
         			return -1;
         		}
         	}*/
@@ -32218,20 +32218,20 @@ namespace {
         		global $langs, $conf, $db;
         		global $dolibarr_main_authentication, $dolibarr_main_demo;
         		global $menumanager;
-        
-        
+
+
         		$result = '';
         		$companylink = '';
-        
+
         		$label = '<u>'.$langs->trans("MyModule").'</u>';
         		$label .= '<div width="100%">';
         		$label .= '<b>'.$langs->trans('Ref').':</b> '.$this->ref;
-        
+
         		$link = '<a href="'.DOL_URL_ROOT.'/tax/card.php?id='.$this->id.'"';
         		$link .= ($notooltip ? '' : ' title="'.dol_escape_htmltag($label, 1).'" class="classfortooltip'.($morecss ? ' '.$morecss : '').'"');
         		$link .= '>';
         		$linkend = '</a>';
-        
+
         		if ($withpicto) {
         			$result .= ($link.img_object(($notooltip ? '' : $label), 'label', ($notooltip ? '' : 'class="classfortooltip"'), 0, 0, $notooltip ? 0 : 1).$linkend);
         			if ($withpicto != 2) {
@@ -49040,7 +49040,7 @@ namespace {
         		} else {
         			$info = $this->getFileObjects();
         		}
-        
+
         		header('Content-type: application/json');
         		echo json_encode($info);
         	}
@@ -49076,7 +49076,7 @@ namespace {
         	// Return result in json format
         	header('Content-type: application/json');
         	echo json_encode($success);
-        
+
         	return 0;
         }
         */
@@ -58817,10 +58817,10 @@ namespace {
         {
         }
         /* Example from Microsoft Outlook 2019
-        
+
         	BEGIN:VCARD
         	VERSION:2.1
-        
+
         	N;LANGUAGE=de:surename;forename;secondname;Sir;jun.
         	FN:Sir surename secondname forename jun.
         	ORG:Companyname
@@ -58840,7 +58840,7 @@ namespace {
         	EMAIL;INTERNET:test3@test3.de
         	X-MS-IMADDRESS:test@jabber.org
         	REV:20200424T104242Z
-        
+
         	END:VCARD
         	*/
     }
@@ -61178,10 +61178,10 @@ namespace {
         	$monday_first = ($week_behaviour & self::WEEK_MONDAY_FIRST) ? 1 : 0;
         	$week_year = ($week_behaviour & self::WEEK_YEAR) ? 1 : 0;
         	$first_weekday = ($week_behaviour & self::WEEK_FIRST_WEEKDAY) ? 1 : 0;
-        
+
         	$weekday = self::calc_weekday($first_daynr, !$monday_first);
         	$calc_year = $year;
-        
+
         	if ($month == 1 && $day <= 7 - $weekday) {
         		if (!$week_year && (($first_weekday && $weekday != 0) || (!$first_weekday && $weekday >= 4))) {
         			return 0;
@@ -61191,13 +61191,13 @@ namespace {
         		$first_daynr -= ($days = self::calc_days_in_year($calc_year));
         		$weekday = ($weekday + 53 * 7 - $days) % 7;
         	}
-        
+
         	if (($first_weekday && $weekday != 0) || (!$first_weekday && $weekday >= 4)) {
         		$days = $daynr - ($first_daynr + (7 - $weekday));
         	} else {
         		$days = $daynr - ($first_daynr - $weekday);
         	}
-        
+
         	if ($week_year && $days >= 52 * 7) {
         		$weekday = ($weekday + self::calc_days_in_year($calc_year)) % 7;
         		if ((!$first_weekday && $weekday < 4) || ($first_weekday && $weekday == 0)) {
@@ -85986,9 +85986,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoCostLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -86196,9 +86196,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoCost_DetailLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -86427,9 +86427,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoCost_TypeLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -87398,9 +87398,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoRenter_TypeLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -87634,18 +87634,18 @@ namespace {
         /*public function createCommon(User $user, $closepaidreceipts = 0, $thirdparty = null, $notrigger = false)
         	{
         		global $langs, $object, $form;
-        
+
         		$error = 0;
-        
+
         		$now=dol_now();
-        
+
         		$fieldvalues = $this->setSaveQuery();
         		if (array_key_exists('date_creation', $fieldvalues) && empty($fieldvalues['date_creation'])) $fieldvalues['date_creation']=$this->db->idate($now);
         		if (array_key_exists('date_payment', $fieldvalues) && empty($fieldvalues['date_payment'])) $fieldvalues['date_payment']=$this->db->jdate($object->date_payment);
         		if (array_key_exists('fk_user_creat', $fieldvalues) && ! ($fieldvalues['fk_user_creat'] > 0)) $fieldvalues['fk_user_creat']=$user->id;
         		//if (array_key_exists('fk_mode_reglement', $fieldvalues) && ! ($fieldvalues['fk_mode_reglement'] > 0)) $fieldvalues['fk_mode_reglement']=$form->select_types_paiements((GETPOST('fk_mode_reglement')?GETPOST('fk_mode_reglement'):$object->fk_mode_reglement), 'fk_mode_reglement', '', 2);
         		unset($fieldvalues['rowid']);	// The field 'rowid' is reserved field name for autoincrement field so we don't need it into insert.
-        
+
         		$keys=array();
         		$values = array();
         		foreach ($fieldvalues as $k => $v) {
@@ -87653,51 +87653,51 @@ namespace {
         			$value = $this->fields[$k];
         			$values[$k] = $this->quote($v, $value);
         		}
-        
+
         		// Clean and check mandatory
         		foreach ($keys as $key) {
         			// If field is an implicit foreign key field
         			if (preg_match('/^integer:/i', $this->fields[$key]['type']) && $values[$key] == '-1') $values[$key] = '';
         			if (!empty($this->fields[$key]['foreignkey']) && $values[$key] == '-1') $values[$key] = '';
         			if (empty($this->fields[$key]['ref']) && $values[$key] == '') $values[$key] = '(PROV' . $this->id . ')';
-        
+
         			//var_dump($key.'-'.$values[$key].'-'.($this->fields[$key]['notnull'] == 1));
         			if (isset($this->fields[$key]['notnull']) && $this->fields[$key]['notnull'] == 1 && !isset($values[$key]) && is_null($key['default'])) {
         				$error++;
         				$this->errors[] = $langs->trans("ErrorFieldRequired", $this->fields[$key]['label']);
         			}
-        
+
         			// If field is an implicit foreign key field
         			if (preg_match('/^integer:/i', $this->fields[$key]['type']) && empty($values[$key])) $values[$key] = 'null';
         			if (!empty($this->fields[$key]['foreignkey']) && empty($values[$key])) $values[$key] = 'null';
         		}
-        
+
         		if ($error) return -1;
-        
+
         		$this->db->begin();
-        
+
         		if (!$error) {
         			$sql = 'INSERT INTO ' . MAIN_DB_PREFIX . $this->table_element;
         			$sql .= ' (' . implode(", ", $keys) . ')';
         			$sql .= ' VALUES (' . implode(", ", $values) . ')';
-        
+
         			$res = $this->db->query($sql);
         			if ($res === false) {
         				$error++;
         				$this->errors[] = $this->db->lasterror();
         			}
         		}
-        
+
         		if (!$error) {
         			$this->id = $this->db->last_insert_id(MAIN_DB_PREFIX . $this->table_element);
         		}
-        
+
         		// If we have a field ref with a default value of (PROV)
         		if (!$error) {
         			if (key_exists('ref', $this->fields) && $this->fields['ref']['notnull'] > 0 && !is_null($this->fields['ref']['default']) && $this->fields['ref']['default'] == '(PROV)') {
         				$sql = "UPDATE " . MAIN_DB_PREFIX . $this->table_element . " SET ref = '(PROV" . $this->id . ")' WHERE (ref = '(PROV)' OR ref = '') AND rowid = " . $this->id;
         				$resqlupdate = $this->db->query($sql);
-        
+
         				if ($resqlupdate === false) {
         					$error++;
         					$this->errors[] = $this->db->lasterror();
@@ -87706,26 +87706,26 @@ namespace {
         				}
         			}
         		}
-        
+
         		// Create extrafields
         		if (!$error) {
         			$result = $this->insertExtraFields();
         			if ($result < 0) $error++;
         		}
-        
+
         		// Create lines
         		if (!empty($this->table_element_line) && !empty($this->fk_element)) {
         			$num = (is_array($this->lines) ? count($this->lines) : 0);
         			for ($i = 0; $i < $num; $i++) {
         				$line = $this->lines[$i];
-        
+
         				$keyforparent = $this->fk_element;
         				$line->$keyforparent = $this->id;
-        
+
         				// Test and convert into object this->lines[$i]. When coming from REST API, we may still have an array
         				//if (! is_object($line)) $line=json_decode(json_encode($line), false);  // convert recursively array into object.
         				if (!is_object($line)) $line = (object) $line;
-        
+
         				$result = $line->create($user, 1);
         				if ($result < 0) {
         					$this->error = $this->db->lasterror();
@@ -87734,7 +87734,7 @@ namespace {
         				}
         			}
         		}
-        
+
         		// Triggers
         		if (!$error && !$notrigger) {
         			// Call triggers
@@ -87744,7 +87744,7 @@ namespace {
         			}
         			// End call triggers
         		}
-        
+
         		// Commit or rollback
         		if ($error) {
         			$this->db->rollback();
@@ -87840,9 +87840,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoPaymentLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -88359,9 +88359,9 @@ namespace {
         /*function getPropertyTypeLabel($searchkey, $withcode = '', $dbtouse = 0, $outputlangs = '', $entconv = 1, $searchlabel = '')
         	{
         		global $db,$langs;
-        
+
         		$result='';
-        
+
         		// Check parameters
         		if (empty($searchkey) && empty($searchlabel))
         		{
@@ -88370,12 +88370,12 @@ namespace {
         		}
         		if (! is_object($dbtouse)) $dbtouse=$db;
         		if (! is_object($outputlangs)) $outputlangs=$langs;
-        
+
         		$sql = "SELECT rowid, code, label FROM ".MAIN_DB_PREFIX."c_ultimateimmo_immoproperty_type";
         		if (is_numeric($searchkey)) $sql.= " WHERE rowid=".$searchkey;
         		elseif (! empty($searchkey)) $sql.= " WHERE code='".$db->escape($searchkey)."'";
         		else $sql.= " WHERE label='".$db->escape($searchlabel)."'";
-        
+
         		$resql=$dbtouse->query($sql);
         		if ($resql)
         		{
@@ -88927,9 +88927,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoReceiptLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -89968,9 +89968,9 @@ namespace {
         /*public function fetchLines()
         	{
         		$this->lines=array();
-        
+
         		// Load lines with object ImmoRenter_TypeLine
-        
+
         		return count($this->lines)?1:0;
         	}*/
         /**
@@ -93654,7 +93654,7 @@ namespace DebugBar\DataCollector {
         public function getXdebugLink($file, $line = 1)
         {
         }
-        /**  
+        /**
          * Sets the default variable dumper used by all collectors subclassing this class
          *
          * @param DebugBarVarDumper $varDumper
@@ -97504,9 +97504,9 @@ namespace {
         public function fetchLines()
         {
         $this->lines=array();
-        
+
         // Load lines with object EmailCollectorLine
-        
+
         return count($this->lines)?1:0;
         }
         */
@@ -98788,12 +98788,12 @@ namespace {
         	if(! DolibarrApiAccess::$user->hasRight('expedition', 'lire')) {
         		throw new RestException(403);
         	}
-        
+
         	$result = $this->shipment->fetch($id);
         	if( ! $result ) {
         		throw new RestException(404, 'Shipment not found');
         	}
-        
+
         	if( ! DolibarrApi::_checkAccessToResource('expedition',$this->shipment->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
@@ -98821,21 +98821,21 @@ namespace {
                 		if(! DolibarrApiAccess::$user->hasRight('expedition', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->shipment->fetch($id);
                 		if ( ! $result ) {
                 			throw new RestException(404, 'Shipment not found');
                 		}
-                
+
                 		if( ! DolibarrApi::_checkAccessToResource('expedition',$this->shipment->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		$request_data = (object) $request_data;
-                
+
                 		$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
                 		$request_data->label = sanitizeVal($request_data->label);
-                
+
                 		$updateRes = $this->shipment->addline(
                 						$request_data->desc,
                 						$request_data->subprice,
@@ -98864,10 +98864,10 @@ namespace {
                 						$request_data->origin_id,
                 						$request_data->multicurrency_subprice
                 		);
-                
+
                 		if ($updateRes > 0) {
                 			return $updateRes;
-                
+
                 		}
                 		return false;
                 	}*/
@@ -98888,21 +98888,21 @@ namespace {
                 		if (! DolibarrApiAccess::$user->hasRight('expedition', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->shipment->fetch($id);
                 		if ( ! $result ) {
                 			throw new RestException(404, 'Shipment not found');
                 		}
-                
+
                 		if( ! DolibarrApi::_checkAccessToResource('expedition',$this->shipment->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		$request_data = (object) $request_data;
-                
+
                 		$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
                 		$request_data->label = sanitizeVal($request_data->label);
-                
+
                 		$updateRes = $this->shipment->updateline(
                 						$lineid,
                 						$request_data->desc,
@@ -98927,7 +98927,7 @@ namespace {
                 						$request_data->fk_unit,
                 						$request_data->multicurrency_subprice
                 		);
-                
+
                 		if ($updateRes > 0) {
                 			$result = $this->get($id);
                 			unset($result->line);
@@ -99011,7 +99011,7 @@ namespace {
         /*
         public function setinvoiced($id)
         {
-        
+
         	if(! DolibarrApiAccess::$user->hasRight('expedition', 'creer')) {
         			throw new RestException(403);
         	}
@@ -99022,7 +99022,7 @@ namespace {
         	if( ! $result ) {
         			throw new RestException(404, 'Shipment not found');
         	}
-        
+
         	$result = $this->shipment->classifyBilled(DolibarrApiAccess::$user);
         	if( $result < 0) {
         			throw new RestException(400, $this->shipment->error);
@@ -99046,9 +99046,9 @@ namespace {
         /*
         public function createShipmentFromOrder($orderid)
         {
-        
+
         	require_once DOL_DOCUMENT_ROOT . '/commande/class/commande.class.php';
-        
+
         	if(! DolibarrApiAccess::$user->hasRight('expedition', 'lire')) {
         			throw new RestException(403);
         	}
@@ -99058,13 +99058,13 @@ namespace {
         	if(empty($proposalid)) {
         			throw new RestException(400, 'Order ID is mandatory');
         	}
-        
+
         	$order = new Commande($this->db);
         	$result = $order->fetch($proposalid);
         	if( ! $result ) {
         			throw new RestException(404, 'Order not found');
         	}
-        
+
         	$result = $this->shipment->createFromOrder($order, DolibarrApiAccess::$user);
         	if( $result < 0) {
         			throw new RestException(405, $this->shipment->error);
@@ -100131,12 +100131,12 @@ namespace {
         	if(! DolibarrApiAccess::$user->hasRight('expensereport', 'lire')) {
         		throw new RestException(403);
         	}
-        
+
         	$result = $this->expensereport->fetch($id);
         	if( ! $result ) {
         		throw new RestException(404, 'expensereport not found');
         	}
-        
+
         	if( ! DolibarrApi::_checkAccessToResource('expensereport',$this->expensereport->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
@@ -100164,21 +100164,21 @@ namespace {
           if(! DolibarrApiAccess::$user->hasRight('expensereport', 'creer')) {
         		  throw new RestException(403);
         	  }
-        
+
           $result = $this->expensereport->fetch($id);
           if( ! $result ) {
         	 throw new RestException(404, 'expensereport not found');
           }
-        
+
         	  if( ! DolibarrApi::_checkAccessToResource('expensereport',$this->expensereport->id)) {
         		  throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
           }
-        
+
           $request_data = (object) $request_data;
-        
+
           $request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
           $request_data->label = sanitizeVal($request_data->label);
-        
+
           $updateRes = $this->expensereport->addline(
         					$request_data->desc,
         					$request_data->subprice,
@@ -100206,10 +100206,10 @@ namespace {
         					$this->element,
         					$request_data->id
           );
-        
+
           if ($updateRes > 0) {
         	return $updateRes;
-        
+
           }
           return false;
         }
@@ -100231,21 +100231,21 @@ namespace {
         	if(! DolibarrApiAccess::$user->hasRight('expensereport', 'creer')) {
         		  throw new RestException(403);
         	}
-        
+
         	$result = $this->expensereport->fetch($id);
         	if( ! $result ) {
         		throw new RestException(404, 'expensereport not found');
         	}
-        
+
         	if( ! DolibarrApi::_checkAccessToResource('expensereport',$this->expensereport->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
-        
+
         	$request_data = (object) $request_data;
-        
+
         	$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
         	$request_data->label = sanitizeVal($request_data->label);
-        
+
         	$updateRes = $this->expensereport->updateline(
         					$lineid,
         					$request_data->desc,
@@ -100269,7 +100269,7 @@ namespace {
         					$request_data->array_options,
         					$request_data->fk_unit
         	);
-        
+
         	if ($updateRes > 0) {
         		$result = $this->get($id);
         		unset($result->line);
@@ -100294,18 +100294,18 @@ namespace {
           if(! DolibarrApiAccess::$user->hasRight('expensereport', 'creer')) {
         		  throw new RestException(403);
         	  }
-        
+
           $result = $this->expensereport->fetch($id);
           if( ! $result ) {
         	 throw new RestException(404, 'expensereport not found');
           }
-        
+
         	  if( ! DolibarrApi::_checkAccessToResource('expensereport',$this->expensereport->id)) {
         		  throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
           }
-        
+
           // TODO Check the lineid $lineid is a line of object
-        
+
           $updateRes = $this->expensereport->deleteLine($lineid);
           if ($updateRes == 1) {
         	return $this->get($id);
@@ -100358,20 +100358,20 @@ namespace {
                 		if(! DolibarrApiAccess::$user->hasRight('expensereport', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->expensereport->fetch($id);
                 		if( ! $result ) {
                 			throw new RestException(404, 'expensereport not found');
                 		}
-                
+
                 		if( ! DolibarrApi::_checkAccessToResource('expensereport',$this->expensereport->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		if( ! $this->expensereport->valid(DolibarrApiAccess::$user, $idwarehouse)) {
                 			throw new RestException(500, 'Error when validate expensereport');
                 		}
-                
+
                 		return array(
                 			'success' => array(
                 				'code' => 200,
@@ -100450,11 +100450,11 @@ namespace {
           	 if (!$result) {
           	 throw new RestException(404, 'paymentExpenseReport not found');
           	 }
-          
+
           	 if ($paymentExpenseReport->delete(DolibarrApiAccess::$user) < 0) {
           	 throw new RestException(403, 'error when deleting paymentExpenseReport');
           	 }
-          
+
           	 return array(
           	 'success' => array(
           	 'code' => 200,
@@ -102227,12 +102227,12 @@ namespace {
            		if(! DolibarrApiAccess::$user->hasRight('ficheinter', 'lire')) {
            			throw new RestException(403);
            		}
-           
+
            		$result = $this->fichinter->fetch($id);
            		if( ! $result ) {
            			throw new RestException(404, 'Intervention not found');
            		}
-           
+
            		if( ! DolibarrApi::_checkAccessToResource('fichinter',$this->fichinter->id)) {
            			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
            		}
@@ -108149,7 +108149,7 @@ namespace {
          */
         public $default_vat_code;
         /**
-         * @var string|int Default VAT rate of product
+         * @var string|float Default VAT rate of product
          */
         public $tva_tx;
         /**
@@ -115807,7 +115807,7 @@ namespace DebugBar\Bridge\Twig {
     }
     /**
      * Wrapped a Twig Environment to provide profiling features
-     * 
+     *
      * @deprecated
      */
     class TraceableTwigEnvironment extends \Twig_Environment
@@ -116035,7 +116035,7 @@ namespace DebugBar\Bridge\Twig {
     }
     /**
      * Wraps a Twig_Template to add profiling features
-     * 
+     *
      * @deprecated
      */
     class TraceableTwigTemplate extends \Twig_Template implements \Twig_TemplateInterface
@@ -116109,7 +116109,7 @@ namespace DebugBar\Bridge\Twig {
      * $env = new TraceableTwigEnvironment(new Twig_Environment($loader));
      * $debugbar->addCollector(new TwigCollector($env));
      * </code>
-     * 
+     *
      * @deprecated use DebugBar\Bridge\TwigProfileCollector instead
      */
     class TwigCollector extends \DebugBar\DataCollector\DataCollector implements \DebugBar\DataCollector\Renderable, \DebugBar\DataCollector\AssetProvider
@@ -118506,7 +118506,7 @@ namespace DebugBar\Storage {
         }
         /**
          * Filter the metadata for matches.
-         * 
+         *
          * @param  array $meta
          * @param  array $filters
          * @return bool
@@ -118522,7 +118522,7 @@ namespace DebugBar\Storage {
         }
         /**
          * @param  string $id
-         * @return string 
+         * @return string
          */
         public function makeFilename($id)
         {
@@ -118565,7 +118565,7 @@ namespace DebugBar\Storage {
         }
         /**
          * Filter the metadata for matches.
-         * 
+         *
          * @param  array $meta
          * @param  array $filters
          * @return bool
@@ -118581,7 +118581,7 @@ namespace DebugBar\Storage {
         }
         /**
          * @param  string $id
-         * @return string 
+         * @return string
          */
         protected function createKey($id)
         {
@@ -121557,9 +121557,9 @@ namespace {
          * Returns the complete e-mail, ready to send using an alternative
          * mail delivery method. Note that only the mailpart that is made
          * with Mail_Mime is created. This means that,
-         * YOU WILL HAVE NO TO: HEADERS UNLESS YOU SET IT YOURSELF 
+         * YOU WILL HAVE NO TO: HEADERS UNLESS YOU SET IT YOURSELF
          * using the $headers parameter!
-         * 
+         *
          * @param string $separation The separation between these two parts.
          * @param array  $params     The Build parameters passed to the
          *                           get() function. See get() for more info.
@@ -121577,7 +121577,7 @@ namespace {
         /**
          * Returns the complete e-mail body, ready to send using an alternative
          * mail delivery method.
-         * 
+         *
          * @param array $params The Build parameters passed to the
          *                      get() method. See get() for more info.
          *
@@ -121590,7 +121590,7 @@ namespace {
         }
         /**
          * Writes (appends) the complete e-mail into file.
-         * 
+         *
          * @param string $filename  Output file location
          * @param array  $params    The Build parameters passed to the
          *                          get() method. See get() for more info.
@@ -121647,7 +121647,7 @@ namespace {
          * @param bool  $overwrite    Overwrite already existing headers.
          * @param bool  $skip_content Don't return content headers: Content-Type,
          *                            Content-Disposition and Content-Transfer-Encoding
-         * 
+         *
          * @return array              Assoc array with the mime headers
          * @access public
          */
@@ -121747,7 +121747,7 @@ namespace {
          * Since the PHP send function requires you to specify
          * recipients (To: header) separately from the other
          * headers, the To: header is not properly encoded.
-         * To fix this, you can use this public method to 
+         * To fix this, you can use this public method to
          * encode your recipients before sending to the send
          * function
          *
@@ -121787,7 +121787,7 @@ namespace {
         {
         }
         /**
-         * Get file's basename (locale independent) 
+         * Get file's basename (locale independent)
          *
          * @param string $filename Filename
          *
@@ -121863,8 +121863,8 @@ namespace {
      * - Redistributions in binary form must reproduce the above copyright
      *   notice, this list of conditions and the following disclaimer in the
      *   documentation and/or other materials provided with the distribution.
-     * - Neither the name of the authors, nor the names of its contributors 
-     *   may be used to endorse or promote products derived from this 
+     * - Neither the name of the authors, nor the names of its contributors
+     *   may be used to endorse or promote products derived from this
      *   software without specific prior written permission.
      *
      * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -131269,7 +131269,7 @@ namespace {
         }
         /**
          * Open a Zip archive
-         * 
+         *
          * @param string $filename the name of the archive to open
          * @return true if openning has succeeded
          */
@@ -131278,7 +131278,7 @@ namespace {
         }
         /**
          * Retrieve the content of a file within the archive from its name
-         * 
+         *
          * @param string $name the name of the file to extract
          * @return the content of the file in a string
          */
@@ -131287,7 +131287,7 @@ namespace {
         }
         /**
          * Add a file within the archive from a string
-         * 
+         *
          * @param string $localname the local path to the file in the archive
          * @param string $contents the content of the file
          * @return true if the file has been successful added
@@ -131297,7 +131297,7 @@ namespace {
         }
         /**
          * Add a file within the archive from a file
-         * 
+         *
          * @param string $filename the path to the file we want to add
          * @param string $localname the local path to the file in the archive
          * @return true if the file has been successful added
@@ -159772,10 +159772,10 @@ namespace {
                             if ($this->serveroutput->response[$i][$j]['name'] == "printer-uri") {
                                 $this->printers_uri = array_merge($this->printers_uri,array($this->serveroutput->response[$i][$j]['value']));
                             return;
-                                
+
                                 }
             $this->printers_uri = array_merge($this->printers_uri,array(''));
-         
+
             }
         */
         // REQUEST BUILDING
@@ -163265,12 +163265,12 @@ namespace Luracast\Restler {
          */
         public static $namespace;
         /**
-         * @var string the memcache server hostname / IP address. For the memcache 
+         * @var string the memcache server hostname / IP address. For the memcache
          * cache method.
          */
         public static $memcacheServer = '127.0.0.1';
         /**
-         * @var int the memcache server port. For the memcache cache method. 
+         * @var int the memcache server port. For the memcache cache method.
          */
         public static $memcachePort = 11211;
         /**
@@ -208924,7 +208924,7 @@ namespace Doctrine\Common\Lexer {
         {
         }
         /**
-         * Retrieve the original lexer's input until a given position. 
+         * Retrieve the original lexer's input until a given position.
          *
          * @param integer $position
          *
@@ -236657,7 +236657,7 @@ namespace {
          * Array of hinheritable SVG properties.
          * @since 5.0.000 (2010-05-02)
          * @public static
-         * 
+         *
          * @var string[]
          */
         public static $svginheritprop = array('clip-rule', 'color', 'color-interpolation', 'color-interpolation-filters', 'color-profile', 'color-rendering', 'cursor', 'direction', 'display', 'fill', 'fill-opacity', 'fill-rule', 'font', 'font-family', 'font-size', 'font-size-adjust', 'font-stretch', 'font-style', 'font-variant', 'font-weight', 'glyph-orientation-horizontal', 'glyph-orientation-vertical', 'image-rendering', 'kerning', 'letter-spacing', 'marker', 'marker-end', 'marker-mid', 'marker-start', 'pointer-events', 'shape-rendering', 'stroke', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-opacity', 'stroke-width', 'text-anchor', 'text-rendering', 'visibility', 'word-spacing', 'writing-mode');
@@ -286193,9 +286193,9 @@ namespace {
         /*public function fetchLines()
           	 {
           	 $this->lines=array();
-          
+
           	 // Load lines with object MyObjectLine
-          
+
           	 return count($this->lines)?1:0;
           	 }*/
         /**
@@ -286457,16 +286457,16 @@ namespace {
                 		if (!DolibarrApiAccess::$user->hasRight('stock', 'lire')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->stockmovement->fetch($id);
                 		if (!$result ) {
                 			throw new RestException(404, 'warehouse not found');
                 		}
-                
+
                 		if (!DolibarrApi::_checkAccessToResource('warehouse',$this->stockmovement->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		return $this->_cleanObjectDatas($this->stockmovement);
                 	}*/
         /**
@@ -286526,24 +286526,24 @@ namespace {
                 		if(! DolibarrApiAccess::$user->hasRight('stock', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->stockmovement->fetch($id);
                 		if( ! $result ) {
                 			throw new RestException(404, 'stock movement not found');
                 		}
-                
+
                 		if( ! DolibarrApi::_checkAccessToResource('stock',$this->stockmovement->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		foreach($request_data as $field => $value) {
                 			if ($field == 'id') continue;
                 			$this->stockmovement->$field = $value;
                 		}
-                
+
                 		if($this->stockmovement->update($id, DolibarrApiAccess::$user))
                 			return $this->get ($id);
-                
+
                 		return false;
                 	}*/
         /**
@@ -286562,15 +286562,15 @@ namespace {
                 		if (! $result ) {
                 			throw new RestException(404, 'stock movement not found');
                 		}
-                
+
                 		if (! DolibarrApi::_checkAccessToResource('stock',$this->stockmovement->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		if (! $this->stockmovement->delete(DolibarrApiAccess::$user)) {
                 			throw new RestException(403,'error when delete stock movement');
                 		}
-                
+
                 		return array(
                 			'success' => array(
                 				'code' => 200,
@@ -288681,20 +288681,20 @@ namespace {
         	if(! DolibarrApiAccess::$user->hasRight('projet', 'creer')) {
         		throw new RestException(403);
         	}
-        
+
         	$result = $this->project->fetch($id);
         	if( ! $result ) {
         		throw new RestException(404, 'Project not found');
         	}
-        
+
         	if( ! DolibarrApi::_checkAccessToResource('project',$this->project->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
-        
+
         	$request_data = (object) $request_data;
-        
+
         	$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
-        
+
         	$updateRes = $this->project->addline(
         					$request_data->desc,
         					$request_data->subprice,
@@ -288722,10 +288722,10 @@ namespace {
         					$this->element,
         					$request_data->id
         	);
-        
+
         	if ($updateRes > 0) {
         		return $updateRes;
-        
+
         	}
         	return false;
         }
@@ -288747,20 +288747,20 @@ namespace {
                 		if(! DolibarrApiAccess::$user->hasRight('projet', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->project->fetch($id);
                 		if( ! $result ) {
                 			throw new RestException(404, 'Project not found');
                 		}
-                
+
                 		if( ! DolibarrApi::_checkAccessToResource('project',$this->project->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		$request_data = (object) $request_data;
-                
+
                 		$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
-                
+
                 		$updateRes = $this->project->updateline(
                 						$lineid,
                 						$request_data->desc,
@@ -288784,7 +288784,7 @@ namespace {
                 						$request_data->array_options,
                 						$request_data->fk_unit
                 		);
-                
+
                 		if ($updateRes > 0) {
                 			$result = $this->get($id);
                 			unset($result->line);
@@ -288921,12 +288921,12 @@ namespace {
         	if(! DolibarrApiAccess::$user->hasRight('projet', 'lire')) {
         		throw new RestException(403);
         	}
-        
+
         	$result = $this->project->fetch($id);
         	if( ! $result ) {
         		throw new RestException(404, 'Project not found');
         	}
-        
+
         	if( ! DolibarrApi::_checkAccessToResource('project',$this->project->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
@@ -288977,20 +288977,20 @@ namespace {
         	if(! DolibarrApiAccess::$user->hasRight('projet', 'creer')) {
         		throw new RestException(403);
         	}
-        
+
         	$result = $this->project->fetch($id);
         	if( ! $result ) {
         		throw new RestException(404, 'Project not found');
         	}
-        
+
         	if( ! DolibarrApi::_checkAccessToResource('project',$this->project->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
-        
+
         	$request_data = (object) $request_data;
-        
+
         	$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
-        
+
         	$updateRes = $this->project->addline(
         					$request_data->desc,
         					$request_data->subprice,
@@ -289018,10 +289018,10 @@ namespace {
         					$this->element,
         					$request_data->id
         	);
-        
+
         	if ($updateRes > 0) {
         		return $updateRes;
-        
+
         	}
         	return false;
         }
@@ -289043,20 +289043,20 @@ namespace {
                 		if(! DolibarrApiAccess::$user->hasRight('projet', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->project->fetch($id);
                 		if( ! $result ) {
                 			throw new RestException(404, 'Project not found');
                 		}
-                
+
                 		if( ! DolibarrApi::_checkAccessToResource('project',$this->project->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		$request_data = (object) $request_data;
-                
+
                 		$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
-                
+
                 		$updateRes = $this->project->updateline(
                 						$lineid,
                 						$request_data->desc,
@@ -289080,7 +289080,7 @@ namespace {
                 						$request_data->array_options,
                 						$request_data->fk_unit
                 		);
-                
+
                 		if ($updateRes > 0) {
                 			$result = $this->get($id);
                 			unset($result->line);
@@ -290749,12 +290749,12 @@ namespace {
         	if (!DolibarrApiAccess::$user->hasRight('reception', 'lire')) {
         		throw new RestException(403);
         	}
-        
+
         	$result = $this->reception->fetch($id);
         	if (! $result) {
         		throw new RestException(404, 'Reception not found');
         	}
-        
+
         	if (!DolibarrApi::_checkAccessToResource('reception',$this->reception->id)) {
         		throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
         	}
@@ -290782,21 +290782,21 @@ namespace {
                 		if (!DolibarrApiAccess::$user->hasRight('reception', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->reception->fetch($id);
                 		if (! $result) {
                 			throw new RestException(404, 'Reception not found');
                 		}
-                
+
                 		if (!DolibarrApi::_checkAccessToResource('reception',$this->reception->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		$request_data = (object) $request_data;
-                
+
                 		$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
                 		$request_data->label = sanitizeVal($request_data->label);
-                
+
                 		$updateRes = $this->reception->addline(
                 						$request_data->desc,
                 						$request_data->subprice,
@@ -290825,10 +290825,10 @@ namespace {
                 						$request_data->origin_id,
                 						$request_data->multicurrency_subprice
                 		);
-                
+
                 		if ($updateRes > 0) {
                 			return $updateRes;
-                
+
                 		}
                 		return false;
                 	}*/
@@ -290849,21 +290849,21 @@ namespace {
                 		if (!DolibarrApiAccess::$user->hasRight('reception', 'creer')) {
                 			throw new RestException(403);
                 		}
-                
+
                 		$result = $this->reception->fetch($id);
                 		if (! $result) {
                 			throw new RestException(404, 'Reception not found');
                 		}
-                
+
                 		if (!DolibarrApi::_checkAccessToResource('reception',$this->reception->id)) {
                 			throw new RestException(403, 'Access not allowed for login '.DolibarrApiAccess::$user->login);
                 		}
-                
+
                 		$request_data = (object) $request_data;
-                
+
                 		$request_data->desc = sanitizeVal($request_data->desc, 'restricthtml');
                 		$request_data->label = sanitizeVal($request_data->label);
-                
+
                 		$updateRes = $this->reception->updateline(
                 						$lineid,
                 						$request_data->desc,
@@ -290888,7 +290888,7 @@ namespace {
                 						$request_data->fk_unit,
                 						$request_data->multicurrency_subprice
                 		);
-                
+
                 		if ($updateRes > 0) {
                 			$result = $this->get($id);
                 			unset($result->line);
@@ -290969,7 +290969,7 @@ namespace {
         /*
         public function setinvoiced($id)
         {
-        
+
         	if (!DolibarrApiAccess::$user->hasRight('reception', 'creer')) {
         			throw new RestException(403);
         	}
@@ -290980,7 +290980,7 @@ namespace {
         	if (!$result) {
         			throw new RestException(404, 'Reception not found');
         	}
-        
+
         	$result = $this->reception->classifyBilled(DolibarrApiAccess::$user);
         	if ($result < 0) {
         			throw new RestException(400, $this->reception->error);
@@ -291004,9 +291004,9 @@ namespace {
         /*
         public function createShipmentFromOrder($orderid)
         {
-        
+
         	require_once DOL_DOCUMENT_ROOT . '/commande/class/commande.class.php';
-        
+
         	if (!DolibarrApiAccess::$user->hasRight('reception', 'lire')) {
         			throw new RestException(403);
         	}
@@ -291016,13 +291016,13 @@ namespace {
         	if (empty($proposalid)) {
         			throw new RestException(400, 'Order ID is mandatory');
         	}
-        
+
         	$order = new Commande($this->db);
         	$result = $order->fetch($proposalid);
         	if (!$result) {
         			throw new RestException(404, 'Order not found');
         	}
-        
+
         	$result = $this->reception->createFromOrder($order, DolibarrApiAccess::$user);
         	if( $result < 0) {
         			throw new RestException(405, $this->reception->error);
@@ -293310,11 +293310,11 @@ namespace {
           		if (!$result) {
           			throw new RestException(404, 'salary not found');
           		}
-          
+
           		if ($salary->delete(DolibarrApiAccess::$user) < 0) {
           			throw new RestException(500, 'error when deleting salary');
           		}
-          
+
           		return array(
           			'success' => array(
           				'code' => 200,
@@ -295473,9 +295473,9 @@ namespace {
         /*public function fetchLines()
           	{
           		$this->lines=array();
-          
+
           		// Load lines with object CompanyPaymentModeLine
-          
+
           		return count($this->lines)?1:0;
           	}*/
         /**
@@ -296513,13 +296513,13 @@ namespace {
         {
         	// phpcs:enable
         	$remise = trim($remise) ?trim($remise) : 0;
-        
+
         	if ($user->hasRight('supplier_proposal', 'creer')) {
         		$remise = price2num($remise, 2);
-        
+
         		$sql = "UPDATE ".MAIN_DB_PREFIX."supplier_proposal SET remise_percent = ".((float) $remise);
         		$sql .= " WHERE rowid = ".((int) $this->id)." AND fk_statut = 0";
-        
+
         		if ($this->db->query($sql)) {
         			$this->remise_percent = ((float) $remise);
         			$this->update_price(1);
@@ -296547,14 +296547,14 @@ namespace {
         	if (empty($remise)) {
         		$remise = 0;
         	}
-        
+
         	$remise = price2num($remise);
-        
+
         	if ($user->hasRight('supplier_proposal', 'creer')) {
         		$sql = "UPDATE ".MAIN_DB_PREFIX."supplier_proposal ";
         		$sql .= " SET remise_absolue = ".((float) $remise);
         		$sql .= " WHERE rowid = ".((int) $this->id)." AND fk_statut = 0";
-        
+
         		if ($this->db->query($sql)) {
         			$this->remise_absolue = $remise;
         			$this->update_price(1);
@@ -304905,9 +304905,9 @@ namespace {
         /*public function fetchLines()
           	{
           		$this->lines=array();
-          
+
           		// Load lines with object MyObjectLine
-          
+
           		return count($this->lines)?1:0;
           	}*/
         /**
@@ -311283,11 +311283,11 @@ namespace {
     {
     }
     /* A faire egalement: Modif statut paye et fk_facture des factures payes completement
-       
+
        On recherche facture incorrecte:
        select f.rowid, f.total_ttc as t1, sum(pf.amount) as t2 from llx_facture as f, llx_paiement_facture as pf where pf.fk_facture=f.rowid and f.fk_statut in(2,3) and paye=0 and close_code is null group by f.rowid
        having  f.total_ttc = sum(pf.amount)
-       
+
        On les corrige:
        update llx_facture set paye=1, fk_statut=2 where close_code is null
        and rowid in (...)
@@ -312118,7 +312118,7 @@ namespace {
     	global $conf, $langs;
     	global $API_Endpoint, $API_Url, $API_version, $USE_PROXY, $PROXY_HOST, $PROXY_PORT;
     	global $PAYPAL_API_USER, $PAYPAL_API_PASSWORD, $PAYPAL_API_SIGNATURE;
-    
+
     	//Construct the parameter string that describes DoDirectPayment
     	$nvpstr = '';
     	$nvpstr = $nvpstr . "&AMT=" . urlencode($paymentAmount);              // deprecated by paypal
@@ -312136,9 +312136,9 @@ namespace {
     	$nvpstr = $nvpstr . "&COUNTRYCODE=" . urlencode($countryCode);
     	$nvpstr = $nvpstr . "&IPADDRESS=" . getUserRemotIP();
     	$nvpstr = $nvpstr . "&INVNUM=" . urlencode($tag);
-    
+
     	$resArray=hash_call("DoDirectPayment", $nvpstr);
-    
+
     	return $resArray;
     }
     */
@@ -314178,20 +314178,20 @@ namespace {
     function callApiToPushCounter($id, $signature, $datecreation, $test, $previousid, $previoussignature, $previousdatecreation)
     {
     	global $mysoc, $conf;
-    
+
     	if (isALNERunningVersion(1) && $mysoc->country_code == 'FR') {
     		// Push last rowid + signature to remote dolibarr server
     		// TODO Do it only for selected events: BILL_VALIDATE ?
-    
+
     		// Code here is similar to the one into printCodeForPing(), except that message code/properties/fields may differ.
     		$url_for_ping = getDolGlobalString('MAIN_URL_FOR_PING', "https://ping.dolibarr.org/");
-    
+
     		$algo = 'sha256';
     		$hash_unique_id = getHashUniqueIdOfRegistration($algo);		// The hash of the unique IDof instance
-    
+
     		$t = microtime(true);
     		$micro = sprintf("%06d", (int) (($t - floor($t)) * 1000000));
-    
+
     		$data = '';
     		$data .= 'hash_algo=dol_hash-'.urlencode($algo);
     		$data .= '&hash_unique_id='.urlencode($hash_unique_id);
@@ -314201,9 +314201,9 @@ namespace {
     		$data .= '&version_full='.urlencode(DOL_VERSION);
     		$data .= '&versionblockedlog='.(float) getBlockedLogVersionToShow();
     		$data .= '&versionblockedlog_full='.urlencode(getBlockedLogVersionToShow());
-    
+
     		$data .= '&entity='.(int) $conf->entity;
-    
+
     		$data .= '&lastrowid='.(int) $id;
     		$data .= '&lastsignature='.urlencode($signature);
     		$data .= '&lastdatecreation='.urlencode(dol_print_date($datecreation, 'standard', 'gmt'));
@@ -314213,13 +314213,13 @@ namespace {
     		if ($test) {
     			$data .= '&test=1';
     		}
-    
+
     		$addheaders = array();
     		$timeoutconnect = 1;
     		$timeoutresponse = 1;
-    
+
     		$conf->global->BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING = 1;		// Force probability to 1
-    
+
     		// Probability will be between 1/10 by default and 1/1 if const BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING is set to 1. Can't be lower than 1/10.
     		$BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING = min(10, getDolGlobalInt('BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING', 10));
     		$random = 1;
@@ -314227,15 +314227,15 @@ namespace {
     		if ($BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING > 1) {
     			$random = random_int(1, (int) $BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING);
     		}
-    
+
     		if ($random == 1) {	// 1 chance on BLOCKEDLOG_RANDOMRANGE_FOR_TRACKING
     			dol_syslog("callApiToPushCounter create Record is selected to be remotely pushed for tracking", LOG_DEBUG);
-    
+
     			include_once DOL_DOCUMENT_ROOT.'/core/lib/geturl.lib.php';
     			try {
     				$tmpresult = getURLContent($url_for_ping, 'POST', $data, 1, $addheaders, array('https'), 0, -1, $timeoutconnect, $timeoutresponse, array(), '_dolibarrpushcounter');
     				usleep(1000);
-    
+
     				// Add a warning in log in case of error
     				if ($tmpresult['http_code'] != 200) {
     					$logerrormessage = 'Error: '.$tmpresult['http_code'].' '.$tmpresult['content'];
@@ -314247,10 +314247,10 @@ namespace {
     		} else {
     			dol_syslog("callApiToPushCounter create Record is NOT selected to be remotely pushed for tracking", LOG_DEBUG);
     		}
-    
+
     		return 1;
     	}
-    
+
     	return 0;
     }
     */
@@ -326766,15 +326766,15 @@ namespace {
     function supplierinvoice_prepare_head(FactureFournisseur $object)
     {
     	global $db, $langs, $conf, $user;
-    
+
     	$h = 0;
     	$head = array();
-    
+
     	$head[$h][0] = DOL_URL_ROOT.'/supplier_invoice/card.php?facid='.$object->id;
     	$head[$h][1] = $langs->trans('SupplierInvoice');
     	$head[$h][2] = 'card';
     	$h++;
-    
+
     	if (!getDolGlobalString('MAIN_DISABLE_CONTACTS_TAB')) {
     		$nbContact = count($object->liste_contact(-1, 'internal')) + count($object->liste_contact(-1, 'external'));
     		$head[$h][0] = DOL_URL_ROOT.'/supplier_invoice/contact.php?facid='.$object->id;
@@ -326785,7 +326785,7 @@ namespace {
     		$head[$h][2] = 'contact';
     		$h++;
     	}
-    
+
     	//if ($fac->mode_reglement_code == 'PRE')
     	if (isModEnabled('paymentbybanktransfer')) {
     		$nbStandingOrders = 0;
@@ -326811,13 +326811,13 @@ namespace {
     		$head[$h][2] = 'standingorders';
     		$h++;
     	}
-    
+
     	// Show more tabs from modules
     	// Entries must be declared in modules descriptor with line
     	// $this->tabs = array('entity:+tabname:Title:@mymodule:/mymodule/mypage.php?id=__ID__');   to add new tab
     	// $this->tabs = array('entity:-tabname);   												to remove a tab
     	complete_head_from_modules($conf, $langs, $object, $head, $h, 'supplier_invoice', 'add', 'core');
-    
+
     	if (!getDolGlobalString('MAIN_DISABLE_NOTES_TAB')) {
     		$nbNote = 0;
     		if (!empty($object->note_private)) {
@@ -326834,7 +326834,7 @@ namespace {
     		$head[$h][2] = 'note';
     		$h++;
     	}
-    
+
     	require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
     	require_once DOL_DOCUMENT_ROOT.'/core/class/link.class.php';
     	$upload_dir = $conf->fournisseur->facture->dir_output.'/'.get_exdir($object->id, 2, 0, 0, $object, 'invoice_supplier').$object->ref;
@@ -326847,12 +326847,12 @@ namespace {
     	}
     	$head[$h][2] = 'documents';
     	$h++;
-    
+
     	$head[$h][0] = DOL_URL_ROOT.'/supplier_invoice/info.php?facid='.$object->id;
     	$head[$h][1] = $langs->trans('Info');
     	$head[$h][2] = 'info';
     	$h++;
-    
+
     	$head[$h][0] = DOL_URL_ROOT.'/supplier_invoice/agenda.php?id='.$object->id;
     	$head[$h][1] = $langs->trans("Events");
     	if (isModEnabled('agenda') && ($user->hasRight('agenda', 'myactions', 'read') || $user->hasRight('agenda', 'allactions', 'read'))) {
@@ -326877,7 +326877,7 @@ namespace {
     			}
     			dol_setcache($cachekey, $nbEvent, 120);		// If setting cache fails, this is not a problem, so we do not test result.
     		}
-    
+
     		$head[$h][1] .= '/';
     		$head[$h][1] .= $langs->trans("Agenda");
     		if ($nbEvent > 0) {
@@ -326886,11 +326886,11 @@ namespace {
     	}
     	$head[$h][2] = 'agenda';
     	$h++;
-    
+
     	complete_head_from_modules($conf, $langs, $object, $head, $h, 'supplier_invoice', 'add', 'external');
-    
+
     	complete_head_from_modules($conf, $langs, $object, $head, $h, 'supplier_invoice', 'remove');
-    
+
     	return $head;
     }
     */
@@ -326940,15 +326940,15 @@ namespace {
     function supplierorder_prepare_head(CommandeFournisseur $object)
     {
     	global $db, $langs, $conf, $user;
-    
+
     	$h = 0;
     	$head = array();
-    
+
     	$head[$h][0] = DOL_URL_ROOT.'/supplier_order/card.php?id='.$object->id;
     	$head[$h][1] = $langs->trans("SupplierOrder");
     	$head[$h][2] = 'card';
     	$h++;
-    
+
     	if (!getDolGlobalString('MAIN_DISABLE_CONTACTS_TAB')) {
     		$nbContact = count($object->liste_contact(-1, 'internal')) + count($object->liste_contact(-1, 'external'));
     		$head[$h][0] = DOL_URL_ROOT.'/supplier_order/contact.php?id='.$object->id;
@@ -326959,24 +326959,24 @@ namespace {
     		$head[$h][2] = 'contact';
     		$h++;
     	}
-    
+
     	if (isModEnabled('stock') && (getDolGlobalString('STOCK_CALCULATE_ON_SUPPLIER_DISPATCH_ORDER') || getDolGlobalString('STOCK_CALCULATE_ON_RECEPTION') || getDolGlobalString('STOCK_CALCULATE_ON_RECEPTION_CLOSE'))) {
     		$langs->load("stocks");
     		$head[$h][0] = DOL_URL_ROOT.'/supplier_order/dispatch.php?id='.$object->id;
     		$head[$h][1] = $langs->trans("OrderDispatch");
-    
+
     		//If dispatch process running we add the number of item to dispatch into the head
     		if (in_array($object->status, array($object::STATUS_ORDERSENT, $object::STATUS_RECEIVED_PARTIALLY, $object::STATUS_RECEIVED_COMPLETELY))) {
     			$sumQtyAllreadyDispatched = 0;
     			$sumQtyOrdered = 0;
-    
+
     			if (empty($object->lines)) {
     				$object->fetch_lines();
     			}
     			$nbLinesOrdered = count($object->lines);
     			$dispachedLines = $object->getDispachedLines(1);
     			$nbDispachedLines = count($dispachedLines);
-    
+
     			for ($line = 0 ; $line < $nbDispachedLines; $line++) {
     				$sumQtyAllreadyDispatched += $dispachedLines[$line]['qty'];
     			}
@@ -326988,17 +326988,17 @@ namespace {
     			}
     			$head[$h][1] .= '<span class="badge marginleftonlyshort">'.price2num($sumQtyAllreadyDispatched, 'MS').' / '.price2num($sumQtyOrdered, 'MS').'</span>';
     		}
-    
+
     		$head[$h][2] = 'dispatch';
     		$h++;
     	}
-    
+
     	// Show more tabs from modules
     	// Entries must be declared in modules descriptor with line
     	// $this->tabs = array('entity:+tabname:Title:@mymodule:/mymodule/mypage.php?id=__ID__');   to add new tab
     	// $this->tabs = array('entity:-tabname:Title:@mymodule:/mymodule/mypage.php?id=__ID__');   to remove a tab
     	complete_head_from_modules($conf, $langs, $object, $head, $h, 'supplier_order', 'add', 'core');
-    
+
     	if (!getDolGlobalString('MAIN_DISABLE_NOTES_TAB')) {
     		$nbNote = 0;
     		if (!empty($object->note_private)) {
@@ -327015,7 +327015,7 @@ namespace {
     		$head[$h][2] = 'note';
     		$h++;
     	}
-    
+
     	require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
     	require_once DOL_DOCUMENT_ROOT.'/core/class/link.class.php';
     	$upload_dir = $conf->fournisseur->dir_output."/commande/".dol_sanitizeFileName($object->ref);
@@ -327028,7 +327028,7 @@ namespace {
     	}
     	$head[$h][2] = 'documents';
     	$h++;
-    
+
     	$head[$h][0] = DOL_URL_ROOT.'/supplier_order/info.php?id='.$object->id;
     	$head[$h][1] = $langs->trans("Events");
     	if (isModEnabled('agenda') && ($user->hasRight('agenda', 'myactions', 'read') || $user->hasRight('agenda', 'allactions', 'read'))) {
@@ -327053,7 +327053,7 @@ namespace {
     			}
     			dol_setcache($cachekey, $nbEvent, 120);		// If setting cache fails, this is not a problem, so we do not test result.
     		}
-    
+
     		$head[$h][1] .= '/';
     		$head[$h][1] .= $langs->trans("Agenda");
     		if ($nbEvent > 0) {
@@ -327062,11 +327062,11 @@ namespace {
     	}
     	$head[$h][2] = 'info';
     	$h++;
-    
+
     	complete_head_from_modules($conf, $langs, $object, $head, $h, 'supplier_order', 'add', 'external');
-    
+
     	complete_head_from_modules($conf, $langs, $object, $head, $h, 'supplier_order', 'remove');
-    
+
     	return $head;
     }
     */
@@ -327551,16 +327551,16 @@ namespace {
     {
     	global $db, $langs, $conf, $user;
     	global $dolibarr_main_url_root, $dolibarr_main_data_root;
-    
+
     	//dol_syslog("dolWebsiteSaveContent start (mode=".(defined('USEDOLIBARRSERVER')?'USEDOLIBARRSERVER':'').')');
-    
+
     	// Define $urlwithroot
     	$urlwithouturlroot=preg_replace('/'.preg_quote(DOL_URL_ROOT,'/').'$/i','',trim($dolibarr_main_url_root));
     	$urlwithroot=$urlwithouturlroot.DOL_URL_ROOT;		// This is to use external domain name found into config file
     	//$urlwithroot=DOL_MAIN_URL_ROOT;					// This is to use same domain name than current
-    
+
     	//$content = preg_replace('/(<img.*src=")(?!(http|'.preg_quote(DOL_URL_ROOT,'/').'\/viewimage))/', '\1'.DOL_URL_ROOT.'/viewimage.php?modulepart=medias&file=', $content, -1, $nbrep);
-    
+
     	return $content;
     }
     */
@@ -328930,17 +328930,17 @@ namespace {
      *  @param  int			$hidedesc       Hide description
      *  @param  int			$hideref        Hide ref
      *  @return int         				0 if KO, 1 if OK
-    
+
     function ultimateimmo_create($db, $object, $modele, $outputlangs, $hidedetails=0, $hidedesc=0, $hideref=0)
     {
         // phpcs:enable
     	global $conf, $langs, $user;
     	$langs->load("ultimateimmo@ultimateimmo");
-    
+
     	$error=0;
-    
+
     	$srctemplatepath='';
-    
+
     	// Positionne modele sur le nom du modele de fichinter a utiliser
     	if (! dol_strlen($modele))
     	{
@@ -328953,7 +328953,7 @@ namespace {
     			$modele = 'quittance';
     		}
     	}
-    
+
     	// If selected modele is a filename template (then $modele="modelname:filename")
     	$tmp=explode(':',$modele,2);
         if (! empty($tmp[1]))
@@ -328961,7 +328961,7 @@ namespace {
             $modele=$tmp[0];
             $srctemplatepath=$tmp[1];
         }
-    
+
     	// Search template files
     	$file=''; $classname=''; $filefound=0;
     	$dirmodels=array('/');
@@ -328971,7 +328971,7 @@ namespace {
         	foreach(array('doc','pdf') as $prefix)
         	{
         	    $file = $prefix."_".$modele.".modules.php";
-    
+
         		// On verifie l'emplacement du modele
     			foreach(array('quittance','bail') as $spessificdir)
     			{
@@ -328986,25 +328986,25 @@ namespace {
         	}
         	if ($filefound) break;
         }
-    
+
     	// Charge le modele
     	if ($filefound)
     	{
     		require_once $file;
-    
+
     		$obj = new $classname($db);
-    
+
     		// We save charset_output to restore it because write_file can change it if needed for
     		// output format that does not support UTF8.
     		$sav_charset_output=$outputlangs->charset_output;
     		if ($obj->write_file($object, $outputlangs, $srctemplatepath, $hidedetails, $hidedesc, $hideref) > 0)
     		{
     			$outputlangs->charset_output=$sav_charset_output;
-    
+
     			// We delete old preview
     			require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
     			dol_delete_preview($object);
-    
+
     			return 1;
     		}
     		else

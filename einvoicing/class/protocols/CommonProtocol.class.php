@@ -23,6 +23,9 @@
  * \brief   Common methods for all AP protocols.
  */
 
+/**
+ * @mixin AbstractProtocol
+ */
 trait CommonProtocol
 {
 	/**
@@ -220,13 +223,7 @@ trait CommonProtocol
 				}
 				break;
 			default:
-				if ($global == 1 || $global == 2) {
-					$retour = "0060";	// DUNS
-					// $retour = "EM";	// Emails
-				} else {
-					$retour = "0060";	// DUNS
-					// $retour = "EM";	// Emails
-				}
+				$retour = "0060";	// DUNS
 		}
 		return $retour;
 	}
@@ -287,9 +284,9 @@ trait CommonProtocol
 
 		$tmp = calcul_price_total($line->qty, $line->subprice, $line->remise_percent, $line->tva_tx, 0, 0, 0, 'HT', 0, 0);
 
-		$line->total_ht = $tmp[0];
-		$line->total_ttc = $tmp[2];
-		$line->total_tva = $tmp[1];
+		$line->total_ht = (float) $tmp[0];
+		$line->total_ttc = (float) $tmp[2];
+		$line->total_tva = (float) $tmp[1];
 		$line->multicurrency_tx = 2;
 		$line->multicurrency_total_ht = 2 * $line->total_ht;
 		$line->multicurrency_total_ttc = 2 * $line->total_ttc;
@@ -422,6 +419,10 @@ trait CommonProtocol
 		$thirdparty = new Societe($db);
 		$einvoicing = new EInvoicing($db);
 		$thirdpartyId = -1;
+		// True when the third party was resolved through a structured identifier (SIREN/SIRET/routing/VAT)
+		// and not through a fuzzy name match (findNearest). Used to raise a non-blocking name-mismatch
+		// warning only when identification did not rely on the (descriptive) name itself. See issue #309.
+		$matchedByStructuredIdentifier = false;
 
 		$sellerCountryCode = $sellerInfo['sellercountry'] ?? '';
 
@@ -468,6 +469,7 @@ trait CommonProtocol
 
 						if ($result > 0) {
 							$thirdpartyId = $thirdparty->id;
+							$matchedByStructuredIdentifier = true;
 							dol_syslog(get_class($this) . '::_syncOrCreateThirdpartyFromEInvoiceSeller Found thirdparty by ' . $idScheme . ': ' . $thirdpartyId);
 							break;
 						}
@@ -497,6 +499,7 @@ trait CommonProtocol
 						$result = $thirdparty->fetch($obj->rowid);
 						if ($result > 0) {
 							$thirdpartyId = $thirdparty->id;
+							$matchedByStructuredIdentifier = true;
 							dol_syslog(get_class($this) . '::_syncOrCreateThirdpartyFromEInvoiceSeller Found thirdparty by VAT number: ' . $thirdpartyId);
 						}
 					}
@@ -545,6 +548,28 @@ trait CommonProtocol
 			}
 		}
 
+		// Identifier-based match: raise a NON-BLOCKING warning when the descriptive name carried by the
+		// e-invoice does not match the linked third party. Under EN 16931 / the French CTC framework, a
+		// supplier is identified and routed by its structured identifier (SIREN 0002, SIRET 0009, routing
+		// 0225) and VAT number, never by name. Seller name (BT-27) and trading name (BT-28) are descriptive
+		// fields, so a mismatch must not block import or routing, but it is a legitimate data-quality /
+		// mis-attachment / fraud signal worth surfacing. See issue #309.
+		$nameMismatchWarning = '';
+		if ($thirdpartyId > 0 && $matchedByStructuredIdentifier) {
+			$invoiceNames = array($sellerInfo['sellername'] ?? '', $sellerInfo['sellerTradingName'] ?? '');
+			$dolibarrNames = array($thirdparty->name, $thirdparty->name_alias);
+			if (!$this->_companyNamesAreConsistent($invoiceNames, $dolibarrNames)) {
+				$invoiceName = trim($sellerInfo['sellername'] ?? '');
+				if ($invoiceName === '') {
+					$invoiceName = trim($sellerInfo['sellerTradingName'] ?? '');
+				}
+				$nameMismatchWarning = $langs->trans('EInvoiceSupplierNameMismatchWarning', $invoiceName, $thirdparty->name);
+				dol_syslog(get_class($this) . '::_syncOrCreateThirdpartyFromEInvoiceSeller ' . $nameMismatchWarning, LOG_WARNING);
+				dol_syslog(get_class($this) . '::_syncOrCreateThirdpartyFromEInvoiceSeller ' . $nameMismatchWarning, LOG_WARNING, 0, '_einvoicing');
+				setEventMessages($nameMismatchWarning, null, 'warnings');
+			}
+		}
+
 		// Step 3: Create or update thirdparty
 
 		//$thirdpartyId = -2; // For testing
@@ -556,7 +581,7 @@ trait CommonProtocol
 				dol_syslog(get_class($this) . '::_syncOrCreateThirdpartyFromEInvoiceSeller Complete info disabled, returning existing thirdparty: ' . $thirdpartyId);
 				return array(
 					'res' => $thirdpartyId,
-					'message' => 'Existing thirdparty used without update: ' . $thirdpartyId
+					'message' => 'Existing thirdparty used without update: ' . $thirdpartyId . ($nameMismatchWarning !== '' ? ' - ' . $nameMismatchWarning : '')
 				);
 			}
 
@@ -668,7 +693,7 @@ trait CommonProtocol
 				dol_syslog(get_class($this) . '::_syncOrCreateThirdpartyFromEInvoiceSeller Updated thirdparty: ' . $thirdpartyId);
 				return array(
 					'res' => $thirdpartyId,
-					'message' => 'Thirdparty ' . $thirdparty->name . ' updated successfully.'
+					'message' => 'Thirdparty ' . $thirdparty->name . ' updated successfully.' . ($nameMismatchWarning !== '' ? ' - ' . $nameMismatchWarning : '')
 				);
 			}
 		}
@@ -949,7 +974,7 @@ trait CommonProtocol
 
 		// If no match found after all steps: Create new product
 		if (getDolGlobalInt('EINVOICING_PRODUCTS_AUTO_GENERATION')) {
-			// Auto-create prouct
+			// Auto-create product
 			$product = new Product($db);
 			$product->type 		= $this->_detectProductTypeFromEinvoiceLine($lineData);
 			$product->ref 		= 'EI-' . dol_sanitizeFileName(!empty($lineData['prodsellerid'] && $lineData['prodsellerid'] !== "0000") ? $lineData['prodsellerid'] : uniqid());
@@ -1108,6 +1133,90 @@ trait CommonProtocol
 		];
 
 		return $map[$scheme] ?? '';
+	}
+
+
+	/**
+	 * Normalize a company name for tolerant comparison.
+	 *
+	 * Applies the normalization recommended for e-invoicing name checks so that purely descriptive
+	 * differences do not raise false positives: strip accents, lowercase, drop common legal forms
+	 * (SARL, SAS, GmbH, Ltd...) and collapse everything that is not a letter or a digit. The result is a
+	 * comparison key, not a displayable name.
+	 *
+	 * @param 	string 	$name 	Raw company name
+	 * @return 	string 			Normalized comparison key (may be an empty string)
+	 */
+	private function _normalizeCompanyNameForComparison($name)
+	{
+		$name = trim((string) $name);
+		if ($name === '') {
+			return '';
+		}
+
+		// Strip accents then lowercase so "Société" and "SOCIETE" compare equal
+		$name = strtolower(dol_string_unaccent($name));
+
+		// Remove common legal forms (whole words only) to avoid false positives on suffixes
+		$legalForms = array(
+			'sarl', 'sas', 'sasu', 'sa', 'eurl', 'sci', 'snc', 'scop', 'scs', 'sca', 'gie', 'ei',
+			'societe', 'ste', 'ets', 'etablissements', 'cie', 'gmbh', 'ug', 'ag', 'kg', 'ohg',
+			'ltd', 'limited', 'llc', 'inc', 'corp', 'co', 'plc', 'bv', 'nv', 'srl', 'spa', 'sl',
+		);
+		$name = preg_replace('/\b(' . implode('|', $legalForms) . ')\b/', ' ', $name);
+
+		// Keep only alphanumeric characters (drops punctuation, spaces, &, -, etc.)
+		$name = preg_replace('/[^a-z0-9]/', '', (string) $name);
+
+		return (string) $name;
+	}
+
+
+	/**
+	 * Check whether a name carried by an e-invoice is consistent with the linked third party.
+	 *
+	 * Each candidate name is normalized (see _normalizeCompanyNameForComparison) and a match is accepted
+	 * when any invoice name equals or is contained in any Dolibarr name (or vice versa), so that a trading
+	 * name vs. legal name difference does not trigger a warning. When either side has no usable name after
+	 * normalization, the comparison is inconclusive and the names are considered consistent (no false alarm).
+	 *
+	 * @param 	string[] 	$invoiceNames 	Candidate names from the e-invoice (e.g. BT-27 seller name, BT-28 trading name)
+	 * @param 	string[] 	$dolibarrNames 	Candidate names from the linked third party (e.g. nom, name_alias)
+	 * @return 	bool 						True if consistent (or not comparable), false on a genuine mismatch
+	 */
+	private function _companyNamesAreConsistent(array $invoiceNames, array $dolibarrNames)
+	{
+		$normInvoice = array();
+		foreach ($invoiceNames as $candidate) {
+			$key = $this->_normalizeCompanyNameForComparison($candidate);
+			if ($key !== '') {
+				$normInvoice[$key] = $key;
+			}
+		}
+		$normDolibarr = array();
+		foreach ($dolibarrNames as $candidate) {
+			$key = $this->_normalizeCompanyNameForComparison($candidate);
+			if ($key !== '') {
+				$normDolibarr[$key] = $key;
+			}
+		}
+
+		// Not enough data to compare -> do not raise a warning
+		if (empty($normInvoice) || empty($normDolibarr)) {
+			return true;
+		}
+
+		foreach ($normInvoice as $invoiceName) {
+			foreach ($normDolibarr as $dolibarrName) {
+				if ($invoiceName === $dolibarrName
+					|| strpos($invoiceName, $dolibarrName) !== false
+					|| strpos($dolibarrName, $invoiceName) !== false) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 
@@ -1322,7 +1431,7 @@ trait CommonProtocol
 
 				if (empty($seller->tva_assuj)) {
 					// Can be $categoryVAT = E (VAT exempted) or AE (Autoliquidation)
-					if (1 == 2) {	// Autoliquidation (the VAT is declared by the customer that pay it directly to the government). TODO Not implemented.
+					if (1 == 2) {	// Autoliquidation (the VAT is declared by the customer that pay it directly to the government). TODO Not implemented. @phan-suppress-current-line PhanPluginBothLiteralsBinaryOp
 						// Note: the option ACCOUNTING_FORCE_ENABLE_VAT_REVERSE_CHARGE is for purchase invoices only and is used to dispatch vat differently in accounting..
 						$categoryVAT = 'AE';	// Autoliquidation
 						$exemptionReasonCode = 'VATEX-'.($seller->country_code == 'FR' ? 'FR' : 'EU').'-AE';	// VATEX-EU-AE or VATEX-FR-AE
@@ -1338,7 +1447,7 @@ trait CommonProtocol
 							$exemptionReason = getDolGlobalString('MAIN_INFO_SOCIETE_VAT_EXEMPTION_REASON', 'Tax exempted - TVA en franchise');
 						}
 						if (empty($exemptionReasonCode)) {
-							if ((float) DOl_VERSION < 24.0) {
+							if ((float) DOL_VERSION < 24.0) {
 								throw new Exception('MISSINGSETUP: Your organization is configured to not use VAT. In this case, you must enter into the constant MAIN_INFO_SOCIETE_VAT_EXEMPTION_CODE the reason code of exemption (VATEX-FR-CGI261-1, VATEX-FR-CGI261-4, VATEX-EU-79C.');
 							} else {
 								throw new Exception('MISSINGSETUP: Your organization is configured to not use VAT. In this case, you must enter into the reason code of exemption in the setup of your organization (VATEX-FR-CGI261-1, VATEX-FR-CGI261-4, VATEX-EU-79C.');
@@ -1493,5 +1602,85 @@ trait CommonProtocol
 			return $objMod->numero;
 		}
 		return 0;
+	}
+
+
+	/**
+	 * Link an inbound supplier invoice to its Dolibarr purchase order (commande fournisseur).
+	 *
+	 * Uses the purchase order reference (BT-13, BuyerOrderReferencedDocument/IssuerAssignedID) carried by
+	 * the invoice. The lookup is reference-exact (after trimming) AND scoped to the resolved supplier, so a
+	 * matching reference belonging to another supplier is never linked. The link is only created on a single
+	 * unambiguous match; several matches are flagged (no auto-link) and the absence of a match is silent.
+	 *
+	 * This is internal ERP reconciliation logic and must NEVER block import. See issue #303.
+	 *
+	 * @param 	FactureFournisseur 	$supplierInvoice 	Freshly created supplier invoice (must expose ->id)
+	 * @param 	int 				$socId 				Resolved supplier third party id
+	 * @param 	string 				$orderReference 	BT-13 purchase order reference carried by the invoice
+	 * @return 	string 									Status message for the import log ('' when nothing was done)
+	 */
+	private function _linkSupplierInvoiceToPurchaseOrder($supplierInvoice, $socId, $orderReference)
+	{
+		global $db, $langs;
+
+		$orderReference = trim((string) $orderReference);
+		if ($orderReference === '' || empty($supplierInvoice->id) || (int) $socId <= 0) {
+			return '';
+		}
+
+		require_once DOL_DOCUMENT_ROOT . '/fourn/class/fournisseur.commande.class.php';
+
+		// Reference-exact, supplier-scoped, entity-aware lookup to avoid false positives
+		$sql = "SELECT rowid FROM " . MAIN_DB_PREFIX . "commande_fournisseur";
+		$sql .= " WHERE ref = '" . $db->escape($orderReference) . "'";
+		$sql .= " AND fk_soc = " . ((int) $socId);
+		$sql .= " AND entity IN (" . getEntity('supplier_order') . ")";
+
+		$resql = $db->query($sql);
+		if (!$resql) {
+			dol_syslog(get_class($this) . '::_linkSupplierInvoiceToPurchaseOrder DB error: ' . $db->lasterror(), LOG_ERR);
+			return '';
+		}
+
+		$num = $db->num_rows($resql);
+
+		if ($num == 0) {
+			// No order for this supplier. Surface a warning only if the reference exists for another supplier
+			// (likely mis-reference), otherwise stay silent (unchanged behaviour).
+			$sqlOther = "SELECT rowid FROM " . MAIN_DB_PREFIX . "commande_fournisseur";
+			$sqlOther .= " WHERE ref = '" . $db->escape($orderReference) . "'";
+			$sqlOther .= " AND fk_soc <> " . ((int) $socId);
+			$sqlOther .= " AND entity IN (" . getEntity('supplier_order') . ")";
+			$resqlOther = $db->query($sqlOther);
+			if ($resqlOther && $db->num_rows($resqlOther) > 0) {
+				$warn = $langs->trans('EInvoiceSupplierOrderRefWrongSupplier', $orderReference);
+				dol_syslog(get_class($this) . '::_linkSupplierInvoiceToPurchaseOrder ' . $warn, LOG_WARNING);
+				setEventMessages($warn, null, 'warnings');
+				return $warn;
+			}
+			dol_syslog(get_class($this) . '::_linkSupplierInvoiceToPurchaseOrder No supplier order "' . $orderReference . '" for socid ' . ((int) $socId), LOG_DEBUG);
+			return '';
+		}
+
+		if ($num > 1) {
+			// Ambiguous: do not auto-link, flag for manual resolution
+			$warn = $langs->trans('EInvoiceSupplierOrderLinkAmbiguous', $orderReference);
+			dol_syslog(get_class($this) . '::_linkSupplierInvoiceToPurchaseOrder ' . $warn, LOG_WARNING);
+			setEventMessages($warn, null, 'warnings');
+			return $warn;
+		}
+
+		$orderId = (int) $db->fetch_object($resql)->rowid;
+
+		$res = $supplierInvoice->add_object_linked('order_supplier', $orderId);
+		if ($res > 0) {
+			$msg = $langs->trans('EInvoiceSupplierInvoiceLinkedToOrder', $orderReference);
+			dol_syslog(get_class($this) . '::_linkSupplierInvoiceToPurchaseOrder ' . $msg, LOG_DEBUG);
+			return $msg;
+		}
+
+		dol_syslog(get_class($this) . '::_linkSupplierInvoiceToPurchaseOrder Failed to link order ' . $orderId . ' to invoice ' . $supplierInvoice->id . ': ' . $supplierInvoice->error, LOG_ERR);
+		return '';
 	}
 }

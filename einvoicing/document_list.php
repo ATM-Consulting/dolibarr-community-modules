@@ -328,10 +328,8 @@ if ($action == 'confirm_sync' && getDolGlobalString('EINVOICING_PDP') && $confir
 			}
 			//setEventMessages($langs->trans("FailedToSyncADocument").($errortype ? '<br>'.$langs->trans("FailedToSyncADocumentMore") : ''), null, $errortype);
 		} else {
-			// If sync is successful, we delete the old cached files that could not be processed
-			dol_delete_file($filePathCII);
-			dol_delete_file($filePathFacturX);
-
+			// The "last invoice that could not be processed" diagnostic files are managed by the sync
+			// itself (cleared at the start of syncFlows(), re-created per failed flow), not here.
 			if (!empty($sync_result['syncedFlows']) && $sync_result['syncedFlows'] > 0) {
 				// If sync was successful and we processed 1 new record, we clear the submitted date so a new one will be suggested from the last record in db.
 				$syncfromdate = 0;
@@ -648,12 +646,13 @@ $newcardbutton = '';
 //$newcardbutton .= dolGetButtonTitle($langs->trans('New'), '', 'fa fa-plus-circle', dol_buildpath('/einvoicing/document_card.php', 1).'?action=create&backtopage='.urlencode($_SERVER['PHP_SELF']), '', $permissiontoadd);
 
 
+$providershort = '';
 if ($provider) {
-	$title = $langs->trans("EInvoiceSynchronizationHelp", $provider->providerName);
+	$providershort = preg_replace('/ViaPartner$/', '', $provider->providerName);
+	$title = $langs->trans("EInvoiceSynchronizationHelp", $providershort);
 }
 
 print_barre_liste($title, $page, $_SERVER["PHP_SELF"], $param, $sortfield, $sortorder, $massactionbutton, $num, $nbtotalofrecords, $object->picto, 0, $newcardbutton, '', $limit, 0, 0, 1);
-
 
 
 // Add code for pre mass action (confirmation or email presend form)
@@ -707,7 +706,7 @@ $last_sync_info = '<span class="opacitylowx">'.img_picto('', 'long-arrow-alt-rig
 
 $Lastsyncinfosql = "SELECT flow_id, updatedat";
 $Lastsyncinfosql .= " FROM ".MAIN_DB_PREFIX."einvoicing_document";
-$Lastsyncinfosql .= " WHERE provider = '".$db->escape($provider->providerName)."'";
+$Lastsyncinfosql .= " WHERE provider = '".$db->escape($providershort)."'";
 $Lastsyncinfosql .= " AND entity = ".((int) $conf->entity);		// Do not use getentity here, must always be on 1 entity.
 $Lastsyncinfosql .= $db->order("updatedat", "DESC");
 $Lastsyncinfosql .= $db->plimit(1);
@@ -1254,7 +1253,8 @@ while ($i < $imaxinloop) {
 					$isOut = ($object->flow_direction === 'Out');
 					$label = $isOut ? $langs->trans('Output') : $langs->trans('Input');
 					$picto = $isOut ? '1uparrow' : '1downarrow';
-					$class = $isOut ? 'stockmovementexit' : 'stockmovemententry';
+					//$class = $isOut ? 'stockmovementexit' : 'stockmovemententry';
+					$class = $isOut ? 'badge badge-primary' : 'badge badge-secondary';
 
 					print '<span class="' . $class . ' nowrap" title="' . $label . '">';
 					print img_picto($label, $picto, 'class="paddingrightonly"');
@@ -1290,9 +1290,17 @@ while ($i < $imaxinloop) {
 					}
 
 					print $out;
+				} elseif ($key == 'fk_element_type') {
+					print '<span class="nowraponall">';
+					if ((string) $object->$key == 'Facture') {
+						print img_picto('', 'bill', 'class="pictofixedwidth"').$langs->trans("Invoice");
+					} elseif ((string) $object->$key == 'FactureFournisseur') {
+						print img_picto('', 'supplier_invoice', 'class="pictofixedwidth"').$langs->trans("SupplierInvoice");
+					}
+					print  '</span>';
 				} else {
 					if ($val['type'] == 'html' || $val['type'] == 'text') {
-						print '<div class="small minwidth150 lineheightsmall threelinesmax-normallineheight classfortooltip" title="'.dolPrintHTMLForAttribute((string) $object->$key).'">';
+						print '<div class="small minwidth150 lineheightsmall twolinesmax-normallineheight classfortooltip" title="'.dolPrintHTMLForAttribute((string) $object->$key).'">';
 					}
 					print $object->showOutputField($val, $key, (string) $object->$key, '');
 					if ($val['type'] == 'html' || $val['type'] == 'text') {

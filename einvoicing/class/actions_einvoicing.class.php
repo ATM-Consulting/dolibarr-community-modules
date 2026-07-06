@@ -90,11 +90,9 @@ class ActionsEInvoicing extends CommonHookActions
 				// Get current status of e-invoice
 				$currentStatusDetails = $einvoicing->fetchLastknownInvoiceStatus($invoiceObject->id, $invoiceObject->ref);
 
-				if (!isset($currentStatusDetails['code']) || $currentStatusDetails['code'] != $einvoicing::STATUS_IGNORE) {
-					// Never generate/transmit an e-invoice for a DRAFT: regenerating a draft PDF (e.g. after
-					// adding a line) must NOT push anything to the PA. At validation the invoice is already
-					// VALIDATED when Dolibarr regenerates the final PDF, so the legitimate flow is preserved.
-					if ($invoiceObject->status != $invoiceObject::STATUS_DRAFT
+				if (!isset($currentStatusDetails['code']) ||
+					($currentStatusDetails['code'] != $einvoicing::STATUS_IGNORE && $currentStatusDetails['code'] != $einvoicing::STATUS_IGNORE_2)) {
+					if ($invoiceObject->status != $invoiceObject::STATUS_DRAFT	// Never generate/transmit an e-invoice for a DRAFT (note: at validation the invoice has already status VALIDATED when Dolibarr regenerates the final PDF, so the legitimate flow is preserved).
 						&& !getDolGlobalString('EINVOICING_DISABLE_SYNC_DOLI_TO_AP')
 						&& getDolGlobalString('EINVOICING_EINVOICE_IN_REAL_TIME')) {
 						// Call function to create Factur-X document
@@ -278,7 +276,9 @@ class ActionsEInvoicing extends CommonHookActions
 				} elseif (!$locked && in_array($currentStatusDetails['code'], [
 					$einvoicing::STATUS_GENERATED,
 					$einvoicing::STATUS_ERROR,
-					$einvoicing::STATUS_UNKNOWN
+					$einvoicing::STATUS_UNKNOWN,
+					$einvoicing::STATUS_AWAITING_VALIDATION,		// We may retry to Regenerate/resend. We should get an error if we do, but it is interesting to test the retry.
+					$einvoicing::STATUS_AWAITING_ACK				// We may retry to Regenerate/resend. We should get an error if we do, but it is interesting to test the retry.
 				])) {
 					$perm = (bool) $user->hasRight("facture", "creer");
 				} else {
@@ -294,6 +294,20 @@ class ActionsEInvoicing extends CommonHookActions
 					'url' => '/compta/facture/card.php?id=' . $object->id . '&action=generate_einvoice&token=' . newToken()
 				);
 
+				// If the e-invoice is generated, display the button to precheck the e-invoice with the Access Point validation service if available.
+				$PDPManager = new PDPProviderManager($db);
+				$provider = $PDPManager->getProvider(getDolGlobalString('EINVOICING_PDP'));
+				$precheckAvailable = $provider->hasValidator();
+				if ($currentStatusDetails['file'] == 1 && $precheckAvailable ) {
+					$url_button[] = array(
+						'lang' => 'einvoicing',
+						'enabled' => 1,
+						'perm' => (bool) $user->hasRight("facture", "creer"),
+						'label' => $langs->trans('PrecheckEinvoice'),
+						'url' => '/compta/facture/card.php?id=' . $object->id . '&action=precheck_einvoice&token=' . newToken()
+					);
+				}
+
 				// If the e-invoice is generated but not sent, or if it was sent and a validation error was received,
 				// display the button to regenerate the e-invoice
 				// Re-send is offered for not-yet-transmitted states, plus AWAITING_* as a deliberate retry
@@ -306,11 +320,15 @@ class ActionsEInvoicing extends CommonHookActions
 					$einvoicing::STATUS_AWAITING_VALIDATION,		// retry affordance (PA will refuse a duplicate)
 					$einvoicing::STATUS_AWAITING_ACK				// retry affordance (PA will refuse a duplicate)
 				])) {
+					$resend = false;
+					if (in_array($currentStatusDetails['code'], [$einvoicing::STATUS_AWAITING_VALIDATION, $einvoicing::STATUS_AWAITING_ACK])) {
+						$resend = true;
+					}
 					$url_button[] = array(
 						'lang' => 'einvoicing',
 						'enabled' => 1,
 						'perm' => ($forcedisabling ? -1 : ((bool) $user->hasRight("einvoicing", "write") && ($currentStatusDetails['file'] == 1))),
-						'label' => $langs->trans('sendToPDP'),
+						'label' => $langs->trans('sendToPDP' . ($resend ? '2' : '')),
 						'text' => $forcedisabling,
 						//'help' => $langs->trans('SendToPDPHelp'),
 						'url' => '/compta/facture/card.php?id=' . $object->id . '&action=send_to_pdp&token=' . newToken()
@@ -376,7 +394,7 @@ class ActionsEInvoicing extends CommonHookActions
 						$url_button[] = array(
 							'lang' => 'einvoicing',
 							'enabled' => 1,
-							'perm' => ($forcedisabling ? -1 : ((bool) $user->hasRight("facture", "creer") && empty($forcedisabling))),
+							'perm' => ($forcedisabling ? -1 : ((bool) $user->hasRight("fournisseur", "facture", "creer") && empty($forcedisabling))),
 							'label' => (string) $label,
 							'url' => '/fourn/facture/card.php?id=' . $object->id . '&action=sendStatusMessage&pdpstatuscode=' . $code . '&token=' . newToken()
 						);
@@ -574,6 +592,23 @@ class ActionsEInvoicing extends CommonHookActions
 						dol_syslog(__METHOD__ . " " . implode(',', (array) $protocol->errors));
 						$error++;
 					}
+				}
+			}
+
+			// Action to precheck the E-invoice with the Access Point validation service (only if not already sent)
+			if (
+				$action == 'precheck_einvoice' && $permissiontoedit
+				&& $currentStatusDetails['file'] == 1
+			) {
+				// Call precheck method of the Access Point provider
+				$PDPManager = new PDPProviderManager($db);
+				$provider = $PDPManager->getProvider(getDolGlobalString('EINVOICING_PDP'));
+				$einvoiceFilePath = $einvoicing->getEInvoiceFilePath($object->ref);
+				$result = $provider->validateEInvoiceFile($object->id, $einvoiceFilePath);
+				if ($result['res'] > 0) {
+					setEventMessages($langs->trans("InvoicePrecheckSuccessful"), array(), 'mesgs');
+				} else {
+					setEventMessages($langs->trans("InvoicePrecheckFailed"), array(), 'errors');
 				}
 			}
 		}
