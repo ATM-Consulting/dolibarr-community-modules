@@ -385,3 +385,6 @@ ReasonRecipientError=Erreur du destinataire
 ReasonUnknownTransaction=Transaction inconnue
 ReasonUnknownIssuer=Émetteur inconnu
 ReasonAntivirusControl=Contrôle antivirus
+
+# Summeo provider (T6842)
+SummeoInDefaultProduct=Produit générique pour les factures fournisseurs importées (Summeo IN)

@@ -1226,13 +1226,15 @@ class EInvoicing
 		$resprints .= '<tr id="treinvoicing" class="treinvoicingseparator trtreinvoicingseparator_1">';
 		$resprints .= '<td><span class="far fa-' . (($expand_display ? 'minus' : 'plus') . '-square') . '"></span><strong> ' . $langs->trans("EInvoicing") . '</strong></td>';
 		if ($object->element == 'facture' || $object->element == 'invoice') {
-			$url = DOL_URL_ROOT . '/compta/facture/agenda.php?id=' . ((int) $object->id) . '&search_agenda_label=EINVOICING';
+			$agendaRelPath = '/compta/facture/agenda.php';
 		} else {
-			$url = DOL_URL_ROOT . '/fourn/facture/agenda.php?id=' . ((int) $object->id) . '&search_agenda_label=EINVOICING';
+			$agendaRelPath = '/fourn/facture/agenda.php';
 		}
+		$url = DOL_URL_ROOT . $agendaRelPath . '?id=' . ((int) $object->id) . '&search_agenda_label=EINVOICING';
 		$langs->load("suppliers");
 		$resprints .= '<td>';
-		if ($action != 'create') {
+		// The invoice "Events" tab (agenda.php) does not exist on Dolibarr < 18: guard the link to avoid a 404.
+		if ($action != 'create' && file_exists(DOL_DOCUMENT_ROOT . $agendaRelPath)) {
 			$resprints .= '<a href="' . $url . '">' . $langs->trans("History") . '<i class="marginleftonly fas fa-calendar-alt infobox-action"></i></a>';
 		}
 		$resprints .= '</td>';
@@ -1539,12 +1541,16 @@ class EInvoicing
 		$resprints .= '<td>';
 		if ($action != 'create') {
 			if ($object->element == 'facture' || $object->element == 'invoice') {
-				$url = DOL_URL_ROOT . '/compta/facture/agenda.php?id=' . ((int) $object->id) . '&search_agenda_label=EINVOICING';
+				$agendaRelPath = '/compta/facture/agenda.php';
 			} else {
-				$url = DOL_URL_ROOT . '/fourn/facture/agenda.php?id=' . ((int) $object->id) . '&search_agenda_label=EINVOICING';
+				$agendaRelPath = '/fourn/facture/agenda.php';
 			}
+			$url = DOL_URL_ROOT . $agendaRelPath . '?id=' . ((int) $object->id) . '&search_agenda_label=EINVOICING';
 
-			$resprints .= '<a href="' . $url . '">' . $langs->trans("History") . '<i class="marginleftonly fas fa-calendar-alt infobox-action"></i></a>';
+			// The invoice "Events" tab (agenda.php) does not exist on Dolibarr < 18: guard the link to avoid a 404.
+			if (file_exists(DOL_DOCUMENT_ROOT . $agendaRelPath)) {
+				$resprints .= '<a href="' . $url . '">' . $langs->trans("History") . '<i class="marginleftonly fas fa-calendar-alt infobox-action"></i></a>';
+			}
 		}
 
 		$resprints .= '</td>';

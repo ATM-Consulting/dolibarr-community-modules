@@ -482,11 +482,6 @@ class CIIProtocol extends AbstractProtocol
 	 */
 	private function doCreateSupplierInvoiceFromSource($file, $ReadableViewFile, $flowId, $tempFile, $tempFileReadableView)
 	{
-		global $conf, $db, $user;
-
-		$einvoicing = new EInvoicing($db);
-		$return_messages = array();
-
 		if (file_put_contents($tempFile, $file) === false) {
 			return ['res' => -1, 'message' => 'Failed to save CII file to temporary location'];
 		}
@@ -497,14 +492,43 @@ class CIIProtocol extends AbstractProtocol
 			}
 		}
 
-		// --- Create Supplier Invoice object
-		require_once DOL_DOCUMENT_ROOT . '/fourn/class/fournisseur.facture.class.php';
-		$supplierInvoice = new FactureFournisseur($db);
-
-
 		// Read using native parser
 		$parsedHeader = $this->parseInvoiceHeader($file);
 		$parsedLines = $this->parseInvoiceLines($file);
+
+		// Delegate the actual assembly. Kept as a dedicated public method so a provider exchanging a
+		// non-CII payload (e.g. Summeo JSON) can build its own parsed arrays and reuse the exact same
+		// creation/linking/attachment logic without going through the CII XML parser.
+		return $this->assembleSupplierInvoiceFromParsed($parsedHeader, $parsedLines, $flowId, $tempFile, $tempFileReadableView, $file);
+	}
+
+	/**
+	 * Assemble and persist a Dolibarr supplier invoice from already-parsed header and line arrays.
+	 *
+	 * Extracted from doCreateSupplierInvoiceFromSource() so any provider can feed parsed data coming
+	 * from a non-CII source (e.g. Summeo JSON). The CII path stays behaviourally identical: the private
+	 * wrapper parses the XML then delegates here.
+	 *
+	 * @param  array       $parsedHeader         Parsed invoice header (documentno, documenttypecode, documentdate,
+	 *                                            invoiceCurrency, taxBasisTotalAmount, taxTotalAmount,
+	 *                                            grandTotalAmount, orderReference, seller*, ...)
+	 * @param  array       $parsedLines          Parsed invoice lines (billedquantity, netpriceamount,
+	 *                                            rateApplicablePercent, lineTotalAmount, calculatedAmount,
+	 *                                            prodname, proddesc, prodbuyerid, prodsellerid, linedesc, lineid, ...)
+	 * @param  string      $flowId               Source flow identifier (stored in einvoicing_extlinks)
+	 * @param  string|null $sourceFilePath       Optional path to the original source file to attach (XML or PDF)
+	 * @param  string|null $readableViewFilePath Optional path to a readable view file (PDP-generated PDF)
+	 * @param  string|null $sourceContent        Optional raw source content, echoed back as 'xml_data'
+	 * @return array{res:int, message:string, action?:string|null}   res: >0 supplier invoice id, 0 already exists, -1 error
+	 */
+	public function assembleSupplierInvoiceFromParsed(array $parsedHeader, array $parsedLines, $flowId = '', $sourceFilePath = null, $readableViewFilePath = null, $sourceContent = null): array
+	{
+		global $db, $user;
+
+		require_once DOL_DOCUMENT_ROOT . '/fourn/class/fournisseur.facture.class.php';
+		$einvoicing = new EInvoicing($db);
+		$supplierInvoice = new FactureFournisseur($db);
+		$return_messages = array();
 
 		// Check if this invoice has already been imported
 		$sql = "SELECT rowid as id FROM " . MAIN_DB_PREFIX . "facture_fourn";
@@ -574,7 +598,13 @@ class CIIProtocol extends AbstractProtocol
 		if ($supplierInvoice->type === '-1') {
 			return ['res' => -1, 'message' => 'Unfounded dolibarr corresponding Invoice code for document type code: ' . ($parsedHeader['documenttypecode'] ?? 'NA')];
 		}
-		$supplierInvoice->date = isset($parsedHeader['documentdate']) && $parsedHeader['documentdate'] instanceof DateTime ? $parsedHeader['documentdate']->format('Y-m-d') : null;
+		// Robust date handling: accept a DateTime (native CII parser / Summeo mapper) or a non-empty string.
+		$documentDate = $parsedHeader['documentdate'] ?? null;
+		if ($documentDate instanceof DateTime) {
+			$supplierInvoice->date = $documentDate->format('Y-m-d');
+		} else {
+			$supplierInvoice->date = !empty($documentDate) ? $documentDate : null;
+		}
 
 
 		// Set currency
@@ -736,7 +766,11 @@ class CIIProtocol extends AbstractProtocol
 
 			// Add line to invoice
 			$line = new SupplierInvoiceLine($db);
-			//$line->desc = $prodname . (!empty($proddesc) ? "\n" . $proddesc : '');
+			// Line description: only providers supplying an explicit 'linedesc' (e.g. Summeo JSON) set it.
+			// The CII parser does not emit 'linedesc', so the XML path keeps its historical behaviour.
+			if (!empty($parsedLine['linedesc'])) {
+				$line->desc = $parsedLine['linedesc'];
+			}
 			if (!empty($productId)) {
 				$line->fk_product = $productId;
 			}
@@ -813,7 +847,7 @@ class CIIProtocol extends AbstractProtocol
 					$dateDoc = $doc['FormattedIssueDateTime'] ?? null;
 					$typeDoc = $doc['TypeCode'] ?? null;
 
-					$sql = "SELECT rowid FROM " . MAIN_DB_PREFIX . "facture_fourn WHERE ref_supplier = '" . $db->escape($lineRefDocId) . "' LIMIT 1";
+					$sql = "SELECT rowid FROM " . MAIN_DB_PREFIX . "facture_fourn WHERE ref_supplier = '" . $db->escape($refDoc) . "' LIMIT 1";
 					$resql = $db->query($sql);
 					if ($db->num_rows($resql) != 1) {
 						return ['res' => -1, 'message' => 'Document : ' . $refDoc . ' linked to document ' . $parsedHeader['documentno'] . ' not found in Dolibarr'];
@@ -949,9 +983,9 @@ class CIIProtocol extends AbstractProtocol
 			$return_messages[] = 'Supplier Invoice created or updated with ID: ' . $supplierInvoiceId;
 
 
-			// Save original invoice in supplier invoice attachments
-			if ($tempFile && file_exists($tempFile)) {
-				$res = $this->_saveEInvoiceFileToSupplierInvoiceAttachment($supplierInvoice, $tempFile);
+			// Save original invoice in supplier invoice attachments (XML for CII, PDF for a PDF-only provider)
+			if ($sourceFilePath && file_exists($sourceFilePath)) {
+				$res = $this->_saveEInvoiceFileToSupplierInvoiceAttachment($supplierInvoice, $sourceFilePath);
 
 				if ($res['res'] < 0) {
 					$return_messages[] = 'Failed to save Einvoice file as attachment: ' . $res['message'];
@@ -964,8 +998,8 @@ class CIIProtocol extends AbstractProtocol
 
 
 			// Save readable view file in supplier invoice attachments
-			if ($ReadableViewFile && $tempFileReadableView && file_exists($tempFileReadableView)) {
-				$res = $this->_saveEInvoiceFileToSupplierInvoiceAttachment($supplierInvoice, $tempFileReadableView, getDolGlobalString('EINVOICING_PDP', 'PDP'));
+			if ($readableViewFilePath && file_exists($readableViewFilePath)) {
+				$res = $this->_saveEInvoiceFileToSupplierInvoiceAttachment($supplierInvoice, $readableViewFilePath, getDolGlobalString('EINVOICING_PDP', 'PDP'));
 
 				if ($res['res'] < 0) {
 					$return_messages[] = 'Failed to save readable view file as attachment: ' . $res['message'];
@@ -977,7 +1011,7 @@ class CIIProtocol extends AbstractProtocol
 			}
 
 			// TODO : Save receivedFile in supplier invoice attachments
-			return ['res' => $supplierInvoiceId, 'message' => implode("\n", $return_messages), 'xml_data' => $file];
+			return ['res' => $supplierInvoiceId, 'message' => implode("\n", $return_messages), 'xml_data' => $sourceContent];
 		}
 	}
 
@@ -2261,8 +2295,11 @@ class CIIProtocol extends AbstractProtocol
 			}
 		}
 
-		// Prepare destination filename with optional prefix
-		$filename = dol_sanitizeFileName($supplierInvoice->ref_supplier . (empty($suffix) ? '' : '_' . $suffix) . '.xml');
+		// Prepare destination filename with optional prefix. Keep the source extension (.xml for CII,
+		// .pdf for a PDF-only provider); default to .xml for backward compatibility.
+		$sourceExt = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+		$fileExt = ($sourceExt !== '') ? '.' . $sourceExt : '.xml';
+		$filename = dol_sanitizeFileName($supplierInvoice->ref_supplier . (empty($suffix) ? '' : '_' . $suffix) . $fileExt);
 
 		$dest_path = $upload_dir . '/' . $filename;
 
