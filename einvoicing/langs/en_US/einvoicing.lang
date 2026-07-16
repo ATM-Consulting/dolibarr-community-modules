@@ -405,6 +405,3 @@ EINVOICING_ALLOW_REGEN_TRANSMITTED=Allow regenerating the e-invoice of a transmi
 EINVOICING_ALLOW_REGEN_TRANSMITTED_HELP=Off by default. Dev/inspection only: keeps the "Regenerate e-invoice" button and action available on a transmitted invoice so you can rebuild the CII/Factur-X and inspect the XML. Re-sending stays locked.
 EINVOICING_TRANSMITTED_NOT_FOR_PROD=Warning: must not be used in production, breaks the AFNOR/PA/PDP contracts
 EInvoiceTransmittedModifyDisabled=This invoice has been transmitted to the Access Point and can no longer be modified. Issue a credit note or a corrective invoice to amend it.
-
-# Summeo provider (T6842)
-SummeoInDefaultProduct=Generic product for imported supplier invoices (Summeo IN)
