@@ -358,7 +358,15 @@ $morecss = array();
 // Build and execute select
 // --------------------------------------------------------------------
 $sql = "SELECT";
-$sql .= " ".$object->getFieldList('t', array('recap', 'xml_data'));
+// v17 compat: getFieldList() n'exclut pas les champs en Dolibarr < 18.
+// On retire temporairement les champs virtuels/lourds avant de construire le SELECT.
+$excludefields = array('recap', 'xml_data');
+$savedfields = $object->fields;
+foreach ($excludefields as $ef) {
+	unset($object->fields[$ef]);
+}
+$sql .= " ".$object->getFieldList('t');
+$object->fields = $savedfields; // restauration (recap est nécessaire à l'affichage de la liste)
 // Add fields from extrafields
 if (!empty($extrafields->attributes[$object->table_element]['label'])) {
 	foreach ($extrafields->attributes[$object->table_element]['label'] as $key => $val) {
