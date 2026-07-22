@@ -640,7 +640,7 @@ class modEInvoicing extends DolibarrModules
 			0, //$unique
 			0, //$required
 			95032, //$pos
-			array(), //$param
+			'', //$param (Dolibarr 17 / PHP 8.4: ExtraFields::update() does strlen($param) -> must be a string, not array)
 			1, //$alwayseditable
 			'', //$perms
 			'1', //$list
