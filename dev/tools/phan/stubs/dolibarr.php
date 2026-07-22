@@ -5414,7 +5414,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param DoliDb $db Database handler
+         * @param DoliDB $db Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -5663,7 +5663,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param DoliDb $db Database handler
+         * @param DoliDB $db Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -52971,7 +52971,7 @@ namespace {
         /**
          * Set type of input as a select list.
          *
-         * @param ?array<int|string,string|array{id:string,label:string,color:string,picto:string,labelhtml:string,note:string}>  $fieldOptions  A table of field options
+         * @param ?array<int|string,string|array{id:string,label:string,color?:string,picto?:string,labelhtml?:string,note?:string}>  $fieldOptions  A table of field options
          * @return self
          */
         public function setAsSelect($fieldOptions)
@@ -301442,7 +301442,7 @@ namespace {
     class Context
     {
         /**
-         * @var	DoliDb	$db		Database handler
+         * @var	DoliDB	$db		Database handler
          */
         public $db;
         /**
@@ -302388,7 +302388,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	 $db	Database handler
+         * @param	DoliDB	 $db	Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -302568,7 +302568,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -302714,7 +302714,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -302877,7 +302877,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -303009,7 +303009,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {

@@ -2,6 +2,7 @@
 /* Copyright (C) 2022       Laurent Destailleur     <eldy@users.sourceforge.net>
  * Copyright (C) 2024       Frédéric France         <frederic.france@free.fr>
  * Copyright (C) 2025		SuperAdmin					<daoud.mouhamed@gmail.com>
+ * Copyright (C) 2026		MDW							<mdeweerd@users.noreply.github.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -124,6 +125,10 @@ if ($objectRef) {
 		exit;
 	}
 
+	// Authorize the fetched invoice with the standard invoice/third-party access rules: the
+	// e-invoicing write right alone must not expose an invoice the user cannot otherwise read.
+	restrictedArea($user, 'facture', $invoice->id, '', '', 'fk_soc', 'rowid');
+
 	// Get flowId from linked document log
 	$flowId = '';
 	$sql = "SELECT flow_id";
@@ -207,7 +212,7 @@ if ($objectRef) {
 		if ($addevent) {
 			$resLogEvent = $provider->addEvent('STATUS', $eventLabel, $eventMessage, $invoice);
 			if ($resLogEvent < 0) {
-				dol_syslog(__METHOD__ . " Failed to log event for flowId: {$flowId}", LOG_WARNING);
+				dol_syslog(__FILE__ . " Failed to log event for flowId: {$flowId}", LOG_WARNING);
 			}
 		}
 

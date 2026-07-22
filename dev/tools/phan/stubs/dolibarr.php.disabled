@@ -46171,7 +46171,7 @@ namespace {
     class SocialNetworkManager
     {
         /**
-         * @var DoliDb Database handler
+         * @var DoliDB Database handler
          */
         public $db;
         /**
@@ -278430,7 +278430,7 @@ namespace {
     class Context
     {
         /**
-         * @var	DoliDb	$db		Database handler
+         * @var	DoliDB	$db		Database handler
          */
         public $db;
         /**
@@ -279376,7 +279376,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	 $db	Database handler
+         * @param	DoliDB	 $db	Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -279556,7 +279556,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -279702,7 +279702,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -279865,7 +279865,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {
@@ -279997,7 +279997,7 @@ namespace {
         /**
          * Constructor
          *
-         * @param	DoliDb	$db		Database handler
+         * @param	DoliDB	$db		Database handler
          */
         public function __construct(\DoliDB $db)
         {

@@ -39,6 +39,9 @@ EINVOICING_AUTO_SEND_ON_GENERATION_HELP=Si activé, la facture électronique est
 EINVOICING_MAX_FILE_SIZE_MB=Taille maximale du fichier e-facture (Mo)
 EINVOICING_MAX_FILE_SIZE_MB_HELP=Si renseigné, un avertissement non bloquant est affiché lorsque le fichier e-facture généré (XML ou PDF/A-3) dépasse cette taille. Laisser vide ou à 0 pour désactiver le contrôle. Certains Points d'Accès limitent la taille des fichiers acceptés (ex. 10 Mo pour Chorus Pro).
 EInvoiceFileSizeExceedsLimit=Le fichier e-facture généré (%s Mo) dépasse la taille limite configurée (%s Mo). Il est possible que votre Point d'Accès refuse ce fichier.
+
+EINVOICING_USE_BILLING_CONTACT_AS_BUYER=Utiliser le contact de facturation comme acheteur de la facture électronique
+EINVOICING_USE_BILLING_CONTACT_AS_BUYER_HELP=Pour les factures françaises uniquement. Lorsque cette option est activée, si la facture possède un contact de facturation (contact de type « Contact client facturation / BILLING »), ce contact est utilisé comme acheteur dans le XML généré, à la place du tiers de la facture. <br> Si le contact appartient à un autre tiers (par exemple si le siège social est une personne morale distincte), l'ensemble de l'acheteur - nom, adresse, SIREN/SIRET, numéro de TVA et identifiant de routage - est reconstruit à partir de ce tiers. <br> Si le contact appartient au même tiers, seuls le nom et l'adresse de l'acheteur sont remplacés, tandis que le SIREN, le numéro de TVA et le routage restent ceux du tiers de la facture. <br> Désactivée par défaut. Remarque : l'acheteur du XML sera alors différent du tiers affiché sur la facture Dolibarr.
 generateAccessToken=Générer le jeton d'accès
 reGenerateAccessToken=Régénérer le jeton d'accès
 testConnection=Test de connexion
@@ -96,7 +99,7 @@ FxCheckErrorCreditNoteNoSource=Cette note de crédit ne comporte aucune facture 
 InvoiceNotSentToPDPDueToThirdpartyIssues=La facture n'a pas été envoyée au point d'accès en raison d'erreurs dans les données tierces.
 EINVOICING_ENABLE_API_VALIDATION=Activer la validation des données des tiers via les API gouvernementales (SIREN, TVA)
 EINVOICING_ENABLE_API_VALIDATION_HELP=Si cette option est activée, les données tierces (SIREN/SIRET et numéro de TVA) sont vérifiées en temps réel via le Registre national du commerce et des sociétés (data.gouv.fr) et le service VIES (UE) avant la génération et l'envoi de la facture électronique. Si ces services sont indisponibles, la vérification est ignorée (avertissement non bloquant).
-InvoiceRoutingOverride=Adresse de routage spécifique (BT-49)
+InvoiceRoutingOverride=Adresse de routage
 InvoiceRoutingOverrideHelp=Vous pouvez définir ici une adresse de routage de facture électronique spécifique à cette facture (BT-49). Laissez ce champ vide pour utiliser l'adresse de routage de facture électronique par défaut du tiers.
 InvoiceRoutingOverrideDefault=Adresse par défaut du tiers
 RoutingIdInfo=Libellé (facultatif)
@@ -357,7 +360,7 @@ EINVOICING_API_KEY=Clé API
 EINVOICING_ESALINK_TOKEN=Jeton d'accès
 EINVOICING_ESALINK_ACTIONS=Actes
 EINVOICING_ESALINKP_HELP_CREDENTIAL1=Pour utiliser le <b>point d'accès EsaLink</b> comme plateforme de facturation électronique, vous devez suivre les étapes suivantes.
-EINVOICING_ESALINKP_HELP_CREDENTIAL2=Créez un compte sur %s. Les étapes suivantes seront décrites ultérieurement, une fois la fonctionnalité disponible.
+EINVOICING_ESALINKP_HELP_CREDENTIAL2=Contacter un membre distributeur de PDP Libre qui vous proposera un contrat de souscription au contrat groupe négocié par PDP Libre. %s
 
 # AP SuperPDP
 EINVOICING_SUPERPDP_HELP_CREDENTIAL1=Pour utiliser le <b>point d'accès SuperPDP</b> comme point d'accès officiel pour la facturation électronique, vous devez suivre les étapes suivantes :
