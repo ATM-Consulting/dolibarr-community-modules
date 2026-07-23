@@ -709,6 +709,10 @@ abstract class AbstractPDPProvider
 		$actioncomm->authorid = $user->id;
 		$actioncomm->userownerid = $user->id;
 		$actioncomm->elementid = $object->id;
+		// Dolibarr < 18 compatibility: ActionComm::create() populates the DB column fk_element from
+		// $this->fk_element only (elementid is a read-side alias, ignored on insert), so without this the
+		// event would be left unlinked to the invoice. Harmless on 18+ where elementid is also honored.
+		$actioncomm->fk_element = $object->id;
 		$actioncomm->elementtype = $object->element;
 
 		$res = $actioncomm->create($user);
