@@ -77,9 +77,9 @@ class modEInvoicing extends DolibarrModules
 		$this->editor_squarred_logo = '';					// Must be image filename into the module/img directory followed with @modulename. Example: 'myimage.png@einvoicing'
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated', 'experimental_deprecated' or a version string like 'x.y.z'
-		$this->version = '1.0.3';
+		$this->version = trim(file_get_contents(__DIR__.'/../../VERSION'));
 		// Url to the file with your last numberversion of this module
-		//$this->url_last_version = 'http://www.example.com/versionmodule.txt';
+		$this->url_last_version = 'https://raw.githubusercontent.com/Dolibarr/dolibarr-community-modules/refs/heads/main/einvoicing/VERSION';
 
 		// Key used in llx_const table to save module status enabled/disabled (where EINVOICING is value of property name of module in uppercase)
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
@@ -141,7 +141,7 @@ class modEInvoicing extends DolibarrModules
 		// A condition to hide module
 		$this->hidden = getDolGlobalInt('MODULE_EINVOICING_DISABLED'); // A condition to disable module;
 		// List of module class names that must be enabled if this module is enabled. Example: array('always'=>array('modModuleToEnable1','modModuleToEnable2'), 'FR'=>array('modModuleToEnableFR')...)
-		$this->depends = array();
+		$this->depends = array('always'=>array('modFacture', 'modFournisseur'));
 		// List of module class names to disable if this one is disabled. Example: array('modModuleToDisable1', ...)
 		$this->requiredby = array();
 		// List of module class names this module is in conflict with. Example: array('modModuleToDisable1', ...)
@@ -408,6 +408,23 @@ class modEInvoicing extends DolibarrModules
 			'object' => '',
 		);
 		/* END MODULEBUILDER LEFTMENU PDPPRODUCTMAPPING */
+		/* BEGIN MODULEBUILDER LEFTMENU PDPMAPPEDVENDORREFS */
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=einvoicing_documents',
+			'type' => 'left',
+			'titre' => 'MappedVendorRefs',
+			'mainmenu' => 'billing',
+			'leftmenu' => 'einvoicing_vendorrefs',
+			'url' => '/einvoicing/vendorref_list.php',
+			'langs' => 'einvoicing@einvoicing',
+			'position' => 1003,
+			'enabled' => 'isModEnabled("einvoicing")',
+			'perms' => '$user->hasRight("einvoicing", "read")',
+			'target' => '',
+			'user' => 2,
+			'object' => '',
+		);
+		/* END MODULEBUILDER LEFTMENU PDPMAPPEDVENDORREFS */
 		/* BEGIN MODULEBUILDER LEFTMENU PDPSOCIETIES */
 		// $this->menu[$r++] = array(
 		// 	'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=einvoicing_billing',
@@ -648,8 +665,14 @@ class modEInvoicing extends DolibarrModules
 		);
 
 		// Update extrafield par rapport au module openDSI, il faut pouvoir éditer le champ ChorusId
+		// The $param below is '' and not array(): the empty array is only tolerated from Dolibarr 18,
+		// which added an "elseif (is_array($param))" branch to ExtraFields::update_label(). On 17 an
+		// empty array falls through to strlen($param) and kills the whole module installation on PHP 8.
+		// Both forms store exactly the same thing - an empty parameter string - on every version, and
+		// the parameter was itself declared as '' up to 19 before becoming array() in 20, which is the
+		// signature the phan stub carries and the reason for the suppression.
 		$result = $extrafields->update(
-			'd4d_chorus_id', //$attrname
+			'd4d_chorus_id', //$attrname	// @phan-suppress-current-line PhanTypeMismatchArgumentProbablyReal
 			$langs->trans('ChorusId'), //$label
 			'varchar', //$type
 			'36', //$length
@@ -657,7 +680,7 @@ class modEInvoicing extends DolibarrModules
 			0, //$unique
 			0, //$required
 			95032, //$pos
-			'', //$param (Dolibarr 17 / PHP 8.4: ExtraFields::update() does strlen($param) -> must be a string, not array)
+			'', //$param
 			1, //$alwayseditable
 			'', //$perms
 			'1', //$list

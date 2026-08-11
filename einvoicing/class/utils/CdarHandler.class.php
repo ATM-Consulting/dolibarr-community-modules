@@ -282,16 +282,50 @@ class CdarHandler
 		$ProcessCondition = preg_replace('/[^A-Za-z0-9_]/', '', $ProcessCondition); // Clean special chars
 
 		// Electronic address (MDT-73) of the CDAR recipient. Every status but the cash-in (212) is sent on a
-		// supplier invoice: we are the buyer and the CDAR goes back to the vendor, so it is addressed with
-		// the routing the module already resolves for that third party - the one recorded for it, its
-		// SIREN otherwise. Sending the SIREN blindly only works when the platform happens to know the
-		// vendor under that very address, and gets the message refused with "L'adresse electronique
-		// (MDT-73) est invalide" otherwise. getBuyerCommunicationURI() is called on the third party alone:
-		// the invoice-level routing override it also knows about is looked up among the customer invoices
-		// (element_type = 'facture'), which a supplier invoice must not read.
+		// supplier invoice: we are the buyer and the CDAR goes back to the vendor. Sending its SIREN blindly
+		// only works when the platform happens to know the vendor under that very address, and gets the
+		// message refused with "L'adresse electronique (MDT-73) est invalide" otherwise.
+		//
+		// The status is a reply, so the address to reply to is the one the vendor exchanges under:
+		//   1. a routing recorded in Dolibarr for that vendor, which is a deliberate choice of ours;
+		//   2. otherwise the electronic address (BT-34) carried by the e-invoice we received, which is the
+		//      vendor telling us where it exchanges from;
+		//   3. otherwise the platform directory, which may list another address of the same SIREN;
+		//   4. otherwise the SIREN guessed by getBuyerCommunicationURI(). It is called on the third party
+		//      alone: the invoice-level routing override it also knows about is looked up among the customer
+		//      invoices (element_type = 'facture'), which a supplier invoice must not read.
 		$RecipientURIID = $InvoiceIssuerGlobalID;
 		if ($statusCode != 212 && $object->thirdparty instanceof Societe) {
-			$vendorURIID = $einvoicing->getBuyerCommunicationURI($object->thirdparty);
+			$vendorRouting = $einvoicing->fetchDefaultRouting($object->thirdparty->id);
+			$vendorURIID = ($vendorRouting > 0) ? $einvoicing->removeSpaces((string) $vendorRouting) : '';	// 0 when none is recorded, -1 on error
+
+			if ($vendorURIID === '') {
+				$vendorURIID = $einvoicing->removeSpaces($this->getVendorAddressFromReceivedInvoice($object));
+				if ($vendorURIID !== '') {
+					dol_syslog(__METHOD__ . ' no routing ID recorded for vendor SIREN ' . $InvoiceIssuerGlobalID . ', replying to the electronic address of the invoice it sent us: ' . $vendorURIID, LOG_NOTICE);
+				}
+			}
+
+			if ($vendorURIID === '' && $InvoiceIssuerGlobalID !== '') {
+				// checkRecipientDirectory() returns the first active reception address declared for that
+				// SIREN, and degrades to an empty identifier on the providers that expose no directory.
+				$PDPManager = new PDPProviderManager($this->db);
+				$provider = $PDPManager->getProvider(getDolGlobalString('EINVOICING_PDP'));
+				if (is_object($provider)) {
+					$directory = $provider->checkRecipientDirectory($InvoiceIssuerGlobalID);
+					if (!empty($directory['identifier'])) {
+						$vendorURIID = $einvoicing->removeSpaces($directory['identifier']);
+						dol_syslog(__METHOD__ . ' nothing known about how to reach vendor SIREN ' . $InvoiceIssuerGlobalID . ', using the address the directory declares for it: ' . $vendorURIID, LOG_NOTICE);
+					} else {
+						dol_syslog(__METHOD__ . ' nothing known about how to reach vendor SIREN ' . $InvoiceIssuerGlobalID . ' and the directory returned none (' . $directory['status'] . '), falling back on the SIREN as electronic address: the platform will refuse the status if it does not know the vendor under that address', LOG_WARNING);
+					}
+				}
+			}
+
+			if ($vendorURIID === '') {
+				$vendorURIID = $einvoicing->getBuyerCommunicationURI($object->thirdparty);
+			}
+
 			if ($vendorURIID !== '') {	// Empty with EINVOICING_BLOCK_INVOICE_NO_ROUTING_ID and no routing: keep the SIREN, an empty MDT-73 is worse
 				$RecipientURIID = $vendorURIID;
 			}
@@ -312,6 +346,13 @@ class CdarHandler
 				return array('res' => -1, 'message' => 'Cannot compute the cashed amount (MEN) per VAT rate for invoice ' . $object->ref);
 			}
 			$SpecifiedDocumentStatus['SpecifiedDocumentCharacteristic'] = $cashedAmounts;
+		} elseif ($statusCode == CdarHandler::PROC_PAYMENT_TRANSMITTED) {
+			// "Paiement transmis" tells the vendor what was paid and when (MDG-43 block MDT-207 = MPA).
+			// No rule makes it mandatory, so a status with no known amount is still sent, just bare.
+			$paidAmounts = $this->getPaymentSentCharacteristics($object, $paymentData);
+			if (!empty($paidAmounts)) {
+				$SpecifiedDocumentStatus['SpecifiedDocumentCharacteristic'] = $paidAmounts;
+			}
 		}
 		if (!empty($SpecifiedDocumentStatus)) {
 			// Rule BR-FR-CDV-16: any status detail block must be numbered (MDT-124-2). Only one block is sent.
@@ -408,6 +449,90 @@ class CdarHandler
 		//echo "CDAR file generated: " . $filename;
 
 		return array('res' => 1, 'message' => 'CDAR file generated successfully', 'file' => $filename);
+	}
+
+	/**
+	 * Build the MDG-43 "paid amount" (MPA) block of a status 211 (Paiement transmis) CDAR.
+	 *
+	 * That status tells the vendor of a supplier invoice that its payment has been sent: the block holds
+	 * how much was paid (MDT-215) and when (MDT-217), as in the XP Z12-012 annex B example. Unlike the
+	 * cash-in, no rule makes it mandatory, hence an empty return when no amount is known.
+	 *
+	 * @param  FactureFournisseur|Facture $object      Invoice that has been paid
+	 * @param  array{amount?:float,date?:int}          $paymentData Amount paid (TTC, company currency) and its date as a timestamp. Both default to the payments recorded on the invoice.
+	 * @return array<array{TypeCode:string,ValueAmount:string,CurrencyID:string,ValueDateTime:string}>  MPA block, empty if no amount is known
+	 */
+	public function getPaymentSentCharacteristics($object, $paymentData = array())
+	{
+		global $conf;
+
+		$paidAmount = isset($paymentData['amount']) ? (float) $paymentData['amount'] : 0.0;
+		if (empty($paidAmount) && method_exists($object, 'getSommePaiement')) {
+			$paidAmount = (float) $object->getSommePaiement();
+		}
+		if ($paidAmount <= 0) {
+			dol_syslog(__METHOD__ . ' No paid amount found for invoice id=' . $object->id, LOG_WARNING, 0, '_einvoicing');
+			return array();
+		}
+
+		$paidDate = empty($paymentData['date']) ? dol_now() : $paymentData['date'];
+
+		return array(
+			array(
+				'TypeCode' => 'MPA',
+				'ValueAmount' => number_format($paidAmount, 2, '.', ''),
+				'CurrencyID' => $conf->currency,
+				'ValueDateTime' => dol_print_date($paidDate, '%Y%m%d')
+			)
+		);
+	}
+
+	/**
+	 * Electronic address (BT-34) the vendor put on the e-invoice we received from it.
+	 *
+	 * That address is the vendor saying where it exchanges from, so it is the natural place to send a
+	 * status back to when no routing was recorded for it in Dolibarr. Read from the e-invoice stored with
+	 * the supplier invoice, never by calling the platform back: addressing a status is no reason for a
+	 * network round trip, and an invoice keyed by hand simply has none.
+	 *
+	 * @param  FactureFournisseur $object  Supplier invoice the status is sent on
+	 * @return string                      The address, '' when there is no stored e-invoice to read it from
+	 */
+	private function getVendorAddressFromReceivedInvoice($object)
+	{
+		if (empty($object->id) || $object->element !== 'invoice_supplier') {
+			return '';
+		}
+
+		dol_include_once('/einvoicing/class/helpers/SupplierInvoiceHelper.class.php');
+
+		$xmlData = '';
+		try {
+			// false: an invoice with no e-invoice stored is a normal case (keyed by hand), and addressing
+			// a status is no reason to call the platform back.
+			$xmlData = (string) SupplierInvoiceHelper::getXmlData((int) $object->id, false);
+		} catch (Exception $e) {
+			dol_syslog(__METHOD__ . ' no e-invoice stored for supplier invoice id ' . $object->id . ': ' . $e->getMessage(), LOG_DEBUG);
+			return '';
+		}
+		if ($xmlData === '') {
+			return '';
+		}
+
+		$xml = @simplexml_load_string($xmlData);
+		if ($xml === false) {
+			dol_syslog(__METHOD__ . ' the e-invoice stored for supplier invoice id ' . $object->id . ' is not parsable XML', LOG_WARNING);
+			return '';
+		}
+
+		// Only ram: is needed, so the same read works on a CII and on the XML extracted from a Factur-X
+		$xml->registerXPathNamespace('ram', 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100');
+		$found = $xml->xpath('//ram:SellerTradeParty/ram:URIUniversalCommunication/ram:URIID');
+		if (empty($found)) {
+			return '';
+		}
+
+		return trim((string) $found[0]);
 	}
 
 	/**
@@ -921,6 +1046,10 @@ class CdarHandler
 							$amountElement->setAttribute('currencyID', $characteristic['CurrencyID']);
 						}
 						$characteristicElement->appendChild($amountElement);
+					}
+
+					if (isset($characteristic['ValueDateTime'])) {
+						$this->addDateTimeElement($dom, $characteristicElement, 'ram:ValueDateTime', $characteristic['ValueDateTime'], self::FORMAT_DATE);
 					}
 
 					if (isset($characteristic['ValuePercent'])) {

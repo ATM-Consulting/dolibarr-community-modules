@@ -69,10 +69,13 @@ trait CommonProtocol
 	 *     S = Services
 	 *     M = Mixed (products + services non-accessory)
 	 *
-	 * @param  Facture $invoice Dolibarr invoice object
+	 * @param  Facture 		$invoice 		Dolibarr invoice object
+	 * @param  float|null	$alreadyPaid	Amount already received that the document will report as
+	 *                                      BT-113 (payments + used credit notes). Null recomputes the
+	 *                                      payments alone, which is enough for a standalone call.
 	 * @return string  BillingProcessID
 	 */
-	public function getBillingProcessID($invoice)
+	public function getBillingProcessID($invoice, $alreadyPaid = null)
 	{
 		$hasProduct  = false;
 		$hasService  = false;
@@ -101,7 +104,27 @@ trait CommonProtocol
 		}
 
 		// Determine suffix 1 (initial invoice) or 2 (already paid invoice) according to invoice status and payment information and if the invoice contain a line a deposit (prepayment) so final invoice after deposit then suffix is 4
-		if ($invoice->status == Facture::STATUS_CLOSED && empty($invoice->close_code)) {
+		//
+		// BT-23 describes the billing case of the document, it is not a payment status: in the AFNOR
+		// nominal use case (XP Z12-012 annexe B, UC1_F202500003) the invoice is issued in frame S1 and
+		// stays S1 while the CDAR lifecycle reports 211 "Paiement transmis" then 212 "Encaissée" — the
+		// document is never re-issued in S2. So "already paid" only covers an invoice whose amount was
+		// already received when it was issued, and BR-FR-CO-09 makes that concrete and mandatory:
+		// with B2/S2/M2 the amount already paid (BT-113) must equal the total (BT-112) and the amount
+		// due (BT-115) must be 0, both fatal.
+		//
+		// Deriving the suffix from Facture::STATUS_CLOSED alone broke that: an invoice closed as paid
+		// without matching payment records — what "Classify as paid" does, and what the deposit turned
+		// into a discount does — still reports BT-113 = 0, so the document declared itself already paid
+		// while claiming the full amount was due, and was rejected. Claim the frame only when the
+		// amount the document will actually carry in BT-113 covers the total.
+		$totalTtc = (float) price2num($invoice->total_ttc, 'MT');
+		if ($alreadyPaid === null) {
+			$alreadyPaid = (float) $invoice->getSommePaiement();
+		}
+		$isFullyPaid = ($totalTtc != 0.0 && abs((float) $alreadyPaid - $totalTtc) < 0.005);
+
+		if ($invoice->status == Facture::STATUS_CLOSED && empty($invoice->close_code) && $isFullyPaid) {
 			return $prefix . '2';
 		} else {
 			// Check if the invoice contains a deposit (prepayment) line
@@ -279,11 +302,21 @@ trait CommonProtocol
 		$line->fk_product = 0;
 
 		include_once DOL_DOCUMENT_ROOT.'/core/lib/price.lib.php';
-		// Force MAIN_APPLY_DISCOUNT_ON_UNIT_PRICE_THEN_ROUND_BEFORE_MULTIPLICATION_BY_QTY, so we are sure sample is valid at the initial object.
-		// TODO Make this sample generation working with any configuration of discount.
-		$conf->global->MAIN_APPLY_DISCOUNT_ON_UNIT_PRICE_THEN_ROUND_BEFORE_MULTIPLICATION_BY_QTY = 2;
+		// The specimen has to read the same everywhere, so the discount rounding is pinned instead of
+		// following the instance. It is pinned to the default convention - round the line total - and
+		// not to 2, "round the discounted unit price first", because no two supported cores agree on
+		// what 2 means: 18 and 20 do not implement the option at all and round the total, 23 rounds the
+		// unit price up and 24 rounds it down. On the line below (5 x 100.05 less 10%) that is three
+		// different totals, 450.23 / 450.25 / 450.20, for one specimen. The default is the one value
+		// the four of them return.
+		// Restored right after: this is a specimen, it has no business changing how the rest of the
+		// request computes its prices.
+		$savRoundDiscountOnUnitPrice = getDolGlobalString('MAIN_APPLY_DISCOUNT_ON_UNIT_PRICE_THEN_ROUND_BEFORE_MULTIPLICATION_BY_QTY');
+		$conf->global->MAIN_APPLY_DISCOUNT_ON_UNIT_PRICE_THEN_ROUND_BEFORE_MULTIPLICATION_BY_QTY = '0';
 
 		$tmp = calcul_price_total($line->qty, $line->subprice, $line->remise_percent, $line->tva_tx, 0, 0, 0, 'HT', 0, 0);
+
+		$conf->global->MAIN_APPLY_DISCOUNT_ON_UNIT_PRICE_THEN_ROUND_BEFORE_MULTIPLICATION_BY_QTY = $savRoundDiscountOnUnitPrice;
 
 		$line->total_ht = (float) $tmp[0];
 		$line->total_ttc = (float) $tmp[2];
@@ -294,6 +327,8 @@ trait CommonProtocol
 		$line->multicurrency_total_tva = 2 * $line->total_tva;
 
 		$tmpinvoice->lines[] = $line;
+
+		// TODO Add a second line (deposit) to illustrate the final invoice after deposit scenario.
 
 		$tmpinvoice->total_ht       += $line->total_ht;
 		$tmpinvoice->total_tva      += $line->total_tva;
@@ -352,7 +387,12 @@ trait CommonProtocol
 		$tmpinvoice->contact = $tmpcontact;
 
 
-		// Generate the Dolibarr PDF of the invoice
+		// Generate the Dolibarr PDF of the invoice.
+		// The PDF models reach ExtraFields through CommonDocGenerator::getExtrafieldsInHtml(), and the
+		// core only autoloads that class on the paths that go through a real invoice card. Reached
+		// from a CLI script or a test that only included master.inc.php, the call fatals with
+		// 'Class "ExtraFields" not found', so require it explicitly here.
+		require_once DOL_DOCUMENT_ROOT . '/core/class/extrafields.class.php';
 		$tmpinvoice->generateDocument($tmpinvoice->model_pdf, $outputlangs);
 
 		// For invoice with ->specimen=1, the file is SPECIMEN.pdf so we rename it into ref
@@ -791,18 +831,22 @@ trait CommonProtocol
 			$createUrl .= '&backtopage=' . urlencode(dol_buildpath('/einvoicing/document_list.php', 1));
 
 			$errorDetails = [];
+			// The caller renders $actiondata as "key: value" pairs, the flat shape the PRODUCT_NOT_FOUND
+			// case returns. Building it as a list of one-entry arrays made every value reach the message
+			// as the string "Array", and dropped the first pair altogether, its key being the falsy
+			// index 0 - so the vendor name never made it there.
 			$actiondata = [];
 			if (!empty($sellername)) {
 				$errorDetails[] = 'Supplier: ' . $sellername;
-				$actiondata[] = array('name' => $sellername);
+				$actiondata['name'] = $sellername;
 			}
 			if (!empty($selleremail)) {
 				$errorDetails[] = 'Email: ' . $selleremail;
-				$actiondata[] = array('email' => $selleremail);
+				$actiondata['email'] = $selleremail;
 			}
 			if (!empty($sellervat)) {
 				$errorDetails[] = 'Vat number: ' . $sellervat;
-				$actiondata[] = array('vatnumber' => $sellervat);
+				$actiondata['vatnumber'] = $sellervat;
 			}
 			if (!empty($sellerInfo['sellerGlobalIds']) && is_array($sellerInfo['sellerGlobalIds'])) {
 				foreach ($sellerInfo['sellerGlobalIds'] as $idScheme => $globalId) {
@@ -810,7 +854,7 @@ trait CommonProtocol
 						$idprofField = $this->_mapGlobalIdSchemeToIdprof($idScheme, $sellerCountryCode);
 						if (!empty($idprofField)) {
 							$errorDetails[] = $idprofField.': ' . $globalId;
-							$actiondata[] = array($idprofField => $globalId);
+							$actiondata[$idprofField] = $globalId;
 						}
 					}
 				}
@@ -1337,7 +1381,7 @@ trait CommonProtocol
 	 *
 	 * @param 	CommonInvoiceLine		$line			Invoice line
 	 * @param 	Societe 				$seller			Seller
-	 * @param 	Societe					$buyer			Buyer
+	 * @param 	CommonInvoice			$buyer			Invoice the line belongs to, whose ->thirdparty is the buyer. Not a Societe: the single caller passes the invoice, and the buyer is read through it below.
 	 * @return 	array<string,string>					array('categoryVAT' => Category of VAT rate ('S', 'K', 'E', 'G'), 'ExemptionReason' => '', 'ExemptionReasonCode => '')
 	 */
 	public function getCategoryRate($line, $seller, $buyer)
@@ -1445,11 +1489,35 @@ trait CommonProtocol
 		$exemptionReason = null;		// BT-120
 		$exemptionReasonCode = null;	// BT-121 - Must contain a VATEX code. https://docs.peppol.eu/poacc/billing/3.0/codelist/vatex/
 
+		// A line carrying recoverable non-collected VAT ("TVA non perçue récupérable", the overseas
+		// departments scheme of article 295 of the CGI) states a VAT rate, but that VAT is not collected:
+		// Dolibarr makes the total including tax of such a line equal to its net amount, and the amount
+		// due of the invoice follows. EN 16931 offers no way to declare a VAT that is not claimed - the
+		// total with VAT is the net total plus the VAT total (BR-CO-15), so anything declared here would
+		// be claimed from the buyer. The line is therefore issued exempt, which the standard covers with
+		// a reason code of its own for that very article (issue #508).
+		if (!empty($line->info_bits) && ((int) $line->info_bits & 1)) {
+			$categoryVAT = 'E';
+			if ($seller->country_code == 'FR') {
+				$exemptionReasonCode = 'VATEX-FR-CGI295';
+			} else {
+				// The scheme is French; for any other seller there is no code to quote, and BR-E-10 is
+				// satisfied by the reason text alone.
+				$exemptionReason = 'VAT not collected';
+			}
+			$exemptionReason = $exemptionReason ?: ($VATEX_CODE_LIST[(string) $exemptionReasonCode]['reason'] ?? $exemptionReasonCode);
+
+			return array('categoryVAT' => $categoryVAT, 'ExemptionReason' => $exemptionReason, 'ExemptionReasonCode' => $exemptionReasonCode);
+		}
+
 		if ($vat_rate > 0) {
 			$categoryVAT = 'S';
 
 			if (empty($seller->tva_intra)) {
-				throw new Exception('BADVATNUMBER: The VAT number of the thirdparty ' . $buyer->thirdparty->name . ' is mandatory when there is a non null VAT on at least on line.');
+				// BR-S-02: a "Standard rated" line requires the Seller VAT identifier (BT-31). The test is
+				// on the seller, so the message must name the seller - naming the customer sends the
+				// operator looking for the missing number in the wrong record.
+				throw new Exception('BADVATNUMBER[BR-S-02]: The VAT number of the seller ' . $seller->name . ' is mandatory when there is a non null VAT on at least one line.');
 			}
 			if (!$this->checkIfVatRateIsValid($vat_rate, $seller->country_code)) {
 				throw new Exception('BADVATRATE[BR-FR-16]: The VAT rate ' . $vat_rate . ($id ? ' on line ' . $id : '') . ' is not a valid string value for country ' . $seller->country_code . '.');

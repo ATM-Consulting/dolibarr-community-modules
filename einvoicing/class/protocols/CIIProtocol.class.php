@@ -2,6 +2,7 @@
 /* Copyright (C) 2026       Laurent Destailleur         <eldy@users.sourceforge.net>
  * Copyright (C) 2026       Mohamed DAOUD               <mdaoud@dolicloud.com>
  * Copyright (C) 2026		MDW							<mdeweerd@users.noreply.github.com>
+ * Copyright (C) 2026		Jose Martinez				<jose.martinez@pichinov.com>
  *
  *
  * This program is free software: you can redistribute it and/or modify
@@ -33,6 +34,10 @@ require_once DOL_DOCUMENT_ROOT . '/core/class/translate.class.php';
 require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/discount.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+// dolChmod() only exists from Dolibarr 18, and both writers call it on the XML they just produced.
+if ((float) DOL_VERSION < 18) {
+	dol_include_once('/einvoicing/compat/files.lib.php');
+}
 
 dol_include_once('einvoicing/class/protocols/AbstractProtocol.class.php');
 dol_include_once('einvoicing/class/protocols/CommonProtocol.class.php');
@@ -94,6 +99,17 @@ class CIIProtocol extends AbstractProtocol
 	 * @var array<string,null|false|int|string|array>
 	 */
 	protected $lineTemplate;
+	/**
+	 * Number of transactions opened by doCreateSupplierInvoiceFromSource() and not closed by it yet.
+	 * Drained (committed or rolled back) by createSupplierInvoiceFromSource(), the public wrapper.
+	 *
+	 * We count what we open instead of reading $db->transaction_opened: that property belongs to the
+	 * database handler and is not readable when $db is a wrapper around it (it then stays null, and
+	 * the transaction was silently left open - see issue #524).
+	 *
+	 * @var int
+	 */
+	protected $openedTransactions = 0;
 	/**
 	 * Return the number of decimals to use for a unit price (BT-146, BT-147, BT-148).
 	 *
@@ -500,8 +516,9 @@ class CIIProtocol extends AbstractProtocol
 
 		$xmlcontent = $this->buildXML($invoiceData, $linesData, $this->getBuildXmlProfile(), $outputlangs);
 
-		// Local EN 16931 business rules safety net (warnings, or abort in strict mode)
-		$this->checkBusinessRules($xmlcontent);
+		// Local EN 16931 business rules safety net, and check that the document claims the amount the
+		// invoice claims (warnings, or abort in strict mode)
+		$this->checkBusinessRules($xmlcontent, $invoice);
 
 		file_put_contents($xmlfile, $xmlcontent);
 
@@ -657,9 +674,9 @@ class CIIProtocol extends AbstractProtocol
 	{
 		global $conf, $db;
 
-		// Transaction level before the import, to close only the transaction opened by
-		// doCreateSupplierInvoiceFromSource() and never one owned by a caller.
-		$transactionLevel = $db->transaction_opened;
+		// Only the transactions opened by doCreateSupplierInvoiceFromSource() are ours to close,
+		// never one owned by a caller: it counts them in $this->openedTransactions.
+		$this->openedTransactions = 0;
 
 		$tempDir = $conf->einvoicing->dir_temp;
 		if (!dol_is_dir($tempDir)) {
@@ -682,8 +699,13 @@ class CIIProtocol extends AbstractProtocol
 
 			// The invoice import transaction is opened by doCreateSupplierInvoiceFromSource() once the
 			// vendor has been synchronized. Close it here so every early return - and any exception -
-			// leaves a clean transaction state.
-			if ($db->transaction_opened > $transactionLevel) {
+			// leaves a clean transaction state. A transaction left open would be rolled back by
+			// Dolibarr at the end of the request, taking the imported invoices AND the synchronization
+			// history down with it (issue #524).
+			// One commit/rollback per opened level: nested levels only decrement the counter of the
+			// database handler, the real COMMIT/ROLLBACK is issued on the last one.
+			while ($this->openedTransactions > 0) {
+				$this->openedTransactions--;
 				if ($failed) {
 					$db->rollback();
 				} else {
@@ -865,6 +887,7 @@ class CIIProtocol extends AbstractProtocol
 		// with that error carry its socid, so a rolled back vendor makes them point to a thirdparty that
 		// never existed.
 		$db->begin();
+		$this->openedTransactions++;
 
 		$syncSocRes = $this->_syncOrCreateThirdpartyFromEInvoiceSeller($parsedHeader, 'dolibarr', $flowId);
 
@@ -872,6 +895,7 @@ class CIIProtocol extends AbstractProtocol
 		$return_messages[] = $syncSocRes['message'];
 		if ($socId < 0) {
 			$db->rollback();
+			$this->openedTransactions--;
 			return [
 				'res' => -1,
 				'message' => 'Thirdparty sync or creation error: ' . implode("<br>\n", $return_messages),
@@ -883,11 +907,13 @@ class CIIProtocol extends AbstractProtocol
 		}
 
 		$db->commit();
+		$this->openedTransactions--;
 
 		// From this point on, everything belongs to the invoice import (products, invoice, lines) and
 		// stays atomic. This second transaction is closed (commit or rollback) by
 		// createSupplierInvoiceFromSource(), the public wrapper.
 		$db->begin();
+		$this->openedTransactions++;
 
 		// Load supplier (thirdparty)
 		require_once DOL_DOCUMENT_ROOT . '/fourn/class/fournisseur.class.php';
@@ -943,8 +969,10 @@ class CIIProtocol extends AbstractProtocol
 		// documentdate is already formatted into 'Y-m-d' by the parser ZugFerd and CII
 		$supplierInvoice->date = !empty($parsedHeader['documentdate']) ? dol_stringtotime($parsedHeader['documentdate']) : null;
 
-		// For credit notes, link to the source invoice via fk_facture_source (BT-25)
-		if ($supplierInvoice->type == FactureFournisseur::TYPE_CREDIT_NOTE && !empty($parsedHeader['invoiceRefDocs']) && is_array($parsedHeader['invoiceRefDocs'])) {
+		// For credit notes and replacement invoices, link to the source invoice via fk_facture_source
+		// (BT-25). A replacement invoice (BT-3 = 384) corrects the invoice it references just as a credit
+		// note cancels it, and Dolibarr stores that source in the same field for both.
+		if (in_array($supplierInvoice->type, array(FactureFournisseur::TYPE_CREDIT_NOTE, FactureFournisseur::TYPE_REPLACEMENT)) && !empty($parsedHeader['invoiceRefDocs']) && is_array($parsedHeader['invoiceRefDocs'])) {
 			$firstRefDoc = reset($parsedHeader['invoiceRefDocs']);
 			$refSourceSupplier = !empty($firstRefDoc['IssuerAssignedID']) ? (string) $firstRefDoc['IssuerAssignedID'] : '';
 			if ($refSourceSupplier !== '') {
@@ -954,9 +982,9 @@ class CIIProtocol extends AbstractProtocol
 					$objSource = $db->fetch_object($resqlSource);
 					if ($objSource) {
 						$supplierInvoice->fk_facture_source = (int) $objSource->rowid;
-						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Credit note linked to source invoice id=' . $supplierInvoice->fk_facture_source, LOG_DEBUG);
+						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Linked to source invoice id=' . $supplierInvoice->fk_facture_source, LOG_DEBUG);
 					} else {
-						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Source invoice ref_supplier="' . $refSourceSupplier . '" not found for credit note ' . ($parsedHeader['documentno'] ?? ''), LOG_WARNING);
+						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Source invoice ref_supplier="' . $refSourceSupplier . '" not found for ' . ($parsedHeader['documentno'] ?? ''), LOG_WARNING);
 					}
 				}
 			}
@@ -1300,6 +1328,10 @@ class CIIProtocol extends AbstractProtocol
 			if (!empty($parsedLine['linedesc'])) {
 				$line->desc = $parsedLine['linedesc'];
 			}
+			// Supplier's product reference (BT-155 SellerAssignedID) -> shown as "Ref. fournisseur" on the line.
+			if (!empty($parsedLine['prodsellerid']) && $parsedLine['prodsellerid'] !== '0000') {
+				$line->ref_supplier = trim($parsedLine['prodsellerid']);
+			}
 			if (!empty($productId)) {
 				$line->fk_product = $productId;
 				if ($productMatchType == 'defaultrouting') {
@@ -1307,6 +1339,10 @@ class CIIProtocol extends AbstractProtocol
 					// vendor: without the wording of the XML, every line of the invoice would show the same
 					// label. Keep the description of the vendor on top of the product link.
 					$line->desc = trim($parsedLine['prodname'] ?? '') . (!empty($parsedLine['proddesc']) ? "\n" . trim($parsedLine['proddesc']) : '');
+				} elseif (!empty($parsedLine['proddesc'])) {
+					// Keep the XML line-level description even when a real product is linked:
+					// it is often project-specific and not carried by the product's own label/description.
+					$line->desc = trim($parsedLine['proddesc']);
 				}
 			} elseif (!$is_deposit_line) {
 				// Free line: no product linked, description set from XML data
@@ -1772,6 +1808,85 @@ class CIIProtocol extends AbstractProtocol
 	}
 
 	/**
+	 * Tell whether a profile allows the EXTENDED-level fields (BT-X-* extensions).
+	 *
+	 * EXTENDED-CTC-FR is a conformant extension of EN16931 built on top of the Factur-X EXTENDED
+	 * profile, so everything EXTENDED allows is allowed there too.
+	 *
+	 * @param 	string 	$profile 	Profile name, uppercased
+	 * @return 	bool 				True if EXTENDED-level fields may be emitted
+	 */
+	protected function isExtendedProfile(string $profile)
+	{
+		return in_array($profile, ['EXTENDED', 'EXTENDEDFR'], true);
+	}
+
+	/**
+	 * Tell whether a profile is one of the header-only Factur-X profiles.
+	 *
+	 * MINIMUM and BASIC WL ("WL" being "without lines") do not merely make some groups optional:
+	 * the elements are absent from their XSD altogether, so emitting one makes the whole document
+	 * fail schema validation. Checked against the schemas shipped by FNFE-MPE (France_RFE,
+	 * Factur-X/<profile>/1xsd/), the ones this module builds and that BASIC and above declare are:
+	 *   - ram:IncludedSupplyChainTradeLineItem 				(BG-25, the invoice lines)
+	 *   - ram:DefinedTradeContact 								(BG-6 / BG-9, the party contacts)
+	 *   - ram:Information 									(BT-82, payment means label)
+	 *   - ram:AccountName 									(BT-85, payment account holder)
+	 *   - ram:PayeeSpecifiedCreditorFinancialInstitution 	(BT-86, the BIC)
+	 * ram:IBANID and ram:ProprietaryID (BT-84) do exist there and stay.
+	 *
+	 * @param 	string 	$profile 	Profile name, uppercased
+	 * @return 	bool 				True if only the header-level subset may be emitted
+	 */
+	protected function isHeaderOnlyProfile(string $profile)
+	{
+		return in_array($profile, ['MINIMUM', 'BASICWL'], true);
+	}
+
+	/**
+	 * Tell whether a profile carries the whole EN 16931 core.
+	 *
+	 * MINIMUM, BASIC WL and BASIC are subsets: a term of the core may simply not exist in their
+	 * XSD, and emitting it makes the document fail schema validation. EN16931 declares the core in
+	 * full, and EXTENDED / EXTENDED-CTC-FR are conformant extensions of it. Checked against the
+	 * Factur-X schemas (vendor/horstoeko/zugferd/src/schema/FACTUR-X_<profile>*.xsd): for instance
+	 * ram:SpecifiedProcuringProject (BT-11) appears from EN16931 on and nowhere below.
+	 *
+	 * @param 	string 	$profile 	Profile name, uppercased
+	 * @return 	bool 				True if the full EN 16931 core may be emitted
+	 */
+	protected function isEn16931Profile(string $profile)
+	{
+		return in_array($profile, ['EN16931', 'EXTENDED', 'EXTENDEDFR'], true);
+	}
+
+	/**
+	 * Tell whether a profile is MINIMUM, whose schema declares almost nothing.
+	 *
+	 * MINIMUM is not a reduced EN 16931: it is a different, far smaller document, and every type it
+	 * declares is cut down. Emitting anything else fails schema validation. What it allows, in full
+	 * (FACTUR-X_MINIMUM_*ReusableAggregateBusinessInformationEntity_100.xsd):
+	 *   ExchangedDocument                   ID, TypeCode, IssueDateTime          (no ram:IncludedNote)
+	 *   HeaderTradeAgreement                BuyerReference, Seller, Buyer, BuyerOrderReferencedDocument
+	 *   TradeParty                          Name, SpecifiedLegalOrganization, PostalTradeAddress,
+	 *                                       SpecifiedTaxRegistration            (no ID/GlobalID, no URI)
+	 *   LegalOrganization                   ID                                  (no TradingBusinessName)
+	 *   TradeAddress                        CountryID                           (nothing else)
+	 *   HeaderTradeDelivery                 nothing at all, the type is empty
+	 *   HeaderTradeSettlement               InvoiceCurrencyCode, SpecifiedTradeSettlementHeaderMonetarySummation
+	 *                                       (no payment means, no ApplicableTradeTax, no payment terms)
+	 *   MonetarySummation                   TaxBasisTotalAmount, TaxTotalAmount, GrandTotalAmount,
+	 *                                       DuePayableAmount                    (no line/charge/allowance/prepaid)
+	 *
+	 * @param 	string 	$profile 	Profile name, uppercased
+	 * @return 	bool 				True if only the MINIMUM subset may be emitted
+	 */
+	protected function isMinimumProfile(string $profile)
+	{
+		return $profile === 'MINIMUM';
+	}
+
+	/**
 	 * Build CII XML from invoice data.
 	 *
 	 * @param array 		$invoiceData 	Header-level invoice data (generated by the buildinvoicelines.inc.php)
@@ -1801,7 +1916,13 @@ class CIIProtocol extends AbstractProtocol
 		$doc->appendChild($root);
 
 		// Add comment
-		$comment = $doc->createComment('Einvoice XML generated by Dolibarr ' . DOL_VERSION . ' - ' . dol_print_date(dol_now('gmt'), 'dayhourrfc', 'gmt'));
+		$hash_unique_id = '';
+		if (function_exists('getHashUniqueIdOfRegistration')) {
+			$algo = 'sha256';
+			$hash_unique_id = getHashUniqueIdOfRegistration($algo);
+		}
+
+		$comment = $doc->createComment('Einvoice XML generated by Dolibarr ' . DOL_VERSION . ' - ' . dol_print_date(dol_now('gmt'), 'dayhourrfc', 'gmt') . ($hash_unique_id ? ' - Instance public hash '.$hash_unique_id : ''));
 		$root->appendChild($comment);
 
 		// Context
@@ -1856,37 +1977,40 @@ class CIIProtocol extends AbstractProtocol
 		$dt->setAttribute('format', '102');
 		$issueDT->appendChild($dt);
 
-		// Notes
-		if (!empty($invoiceData['documentNotePublic'])) {
-			$note = $doc->createElement('ram:IncludedNote');
-			$exDoc->appendChild($note);
-			$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNotePublic'])));
+		// ram:IncludedNote is not declared by the MINIMUM schema: its ExchangedDocumentType allows
+		// only ram:ID, ram:TypeCode and ram:IssueDateTime.
+		if (!$this->isMinimumProfile($profile)) {
+			// Notes
+			if (!empty($invoiceData['documentNotePublic'])) {
+				$note = $doc->createElement('ram:IncludedNote');
+				$exDoc->appendChild($note);
+				$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNotePublic'])));
+			}
+			if (!empty($invoiceData['documentNotePMT'])) {
+				$note = $doc->createElement('ram:IncludedNote');
+				$exDoc->appendChild($note);
+				$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNotePMT'])));
+				$note->appendChild($doc->createElement('ram:SubjectCode', 'PMT'));
+			}
+			if (!empty($invoiceData['documentNotePMD'])) {
+				$note = $doc->createElement('ram:IncludedNote');
+				$exDoc->appendChild($note);
+				$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNotePMD'])));
+				$note->appendChild($doc->createElement('ram:SubjectCode', 'PMD'));
+			}
+			if (!empty($invoiceData['documentNoteAAB'])) {
+				$note = $doc->createElement('ram:IncludedNote');
+				$exDoc->appendChild($note);
+				$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNoteAAB'])));
+				$note->appendChild($doc->createElement('ram:SubjectCode', 'AAB'));
+			}
+			if (!empty($invoiceData['documentNoteTXD'])) {
+				$note = $doc->createElement('ram:IncludedNote');
+				$exDoc->appendChild($note);
+				$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNoteTXD'])));
+				$note->appendChild($doc->createElement('ram:SubjectCode', 'TXD'));
+			}
 		}
-		if (!empty($invoiceData['documentNotePMT'])) {
-			$note = $doc->createElement('ram:IncludedNote');
-			$exDoc->appendChild($note);
-			$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNotePMT'])));
-			$note->appendChild($doc->createElement('ram:SubjectCode', 'PMT'));
-		}
-		if (!empty($invoiceData['documentNotePMD'])) {
-			$note = $doc->createElement('ram:IncludedNote');
-			$exDoc->appendChild($note);
-			$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNotePMD'])));
-			$note->appendChild($doc->createElement('ram:SubjectCode', 'PMD'));
-		}
-		if (!empty($invoiceData['documentNoteAAB'])) {
-			$note = $doc->createElement('ram:IncludedNote');
-			$exDoc->appendChild($note);
-			$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNoteAAB'])));
-			$note->appendChild($doc->createElement('ram:SubjectCode', 'AAB'));
-		}
-		if (!empty($invoiceData['documentNoteTXD'])) {
-			$note = $doc->createElement('ram:IncludedNote');
-			$exDoc->appendChild($note);
-			$note->appendChild($doc->createElement('ram:Content', htmlspecialchars($invoiceData['documentNoteTXD'])));
-			$note->appendChild($doc->createElement('ram:SubjectCode', 'TXD'));
-		}
-
 
 		//$root->appendChild($doc->createTextNode("\n "));
 
@@ -1897,33 +2021,52 @@ class CIIProtocol extends AbstractProtocol
 
 
 		// LINES
-		foreach ($linesData as $line) {
-			// Add a XML comment to help debug
-			$comment = $doc->createComment('Line '.$line['lineid']);
-			$sctt->appendChild($comment);
+		// Skipped entirely on the header-only profiles, see isHeaderOnlyProfile(). The header totals
+		// (BT-106 and the BG-23 breakdown) are built from $invoiceData, not from the line nodes, so
+		// dropping the nodes changes nothing else in the document.
+		if (!$this->isHeaderOnlyProfile($profile)) {
+			foreach ($linesData as $line) {
+				// Add a XML comment to help debug
+				$comment = $doc->createComment('Line '.$line['lineid']);
+				$sctt->appendChild($comment);
 
-			$sctt->appendChild($this->buildLineItem($doc, $line, $profile));
+				$sctt->appendChild($this->buildLineItem($doc, $line, $profile));
+			}
+			// Add a XML comment to help debug
+			$comment = $doc->createComment('End of lines');
+			$sctt->appendChild($comment);
+		} else {
+			$comment = $doc->createComment('No line: profile '.$profile.' is header-only');
+			$sctt->appendChild($comment);
 		}
-		// Add a XML comment to help debug
-		$comment = $doc->createComment('End of lines');
-		$sctt->appendChild($comment);
 
 
 		// SELLER / BUYER
 		$agreement = $doc->createElement('ram:ApplicableHeaderTradeAgreement');
 		$sctt->appendChild($agreement);
 
+		// Buyer reference (BT-10): what the buyer needs to route the invoice on its side, and the
+		// "service exécutant" Chorus Pro expects from a public buyer. Every profile declares it,
+		// MINIMUM included, and it opens the HeaderTradeAgreement sequence, so it is appended
+		// before the parties.
+		if (!empty($invoiceData['buyerReference'])) {
+			$comment = $doc->createComment('Buyer reference (BT-10)');
+			$agreement->appendChild($comment);
+
+			$agreement->appendChild($doc->createElement('ram:BuyerReference', htmlspecialchars($invoiceData['buyerReference'])));
+		}
+
 		// Seller
 		$comment = $doc->createComment('Seller');
 		$agreement->appendChild($comment);
 
-		$this->buildParty($doc, $agreement, $invoiceData, 'seller');
+		$this->buildParty($doc, $agreement, $invoiceData, 'seller', true, false, $profile);
 
 		// Add comment
 		$comment = $doc->createComment('Buyer');
 		$agreement->appendChild($comment);
 
-		$this->buildParty($doc, $agreement, $invoiceData, 'buyer');
+		$this->buildParty($doc, $agreement, $invoiceData, 'buyer', true, false, $profile);
 
 		// Buyer order reference (BT-13): customer purchase order number (Dolibarr "Réf. client").
 		// Emitted only when non-empty to avoid empty tags / cardinality issues. See issue #302.
@@ -1937,6 +2080,34 @@ class CIIProtocol extends AbstractProtocol
 			$buyerOrderRef->appendChild($doc->createElement('ram:IssuerAssignedID', htmlspecialchars($invoiceData['orderReference'])));
 		}
 
+		// Contract reference (BT-12): the contract the invoice is issued under. ram:ContractReferencedDocument
+		// is absent from the MINIMUM schema, so emitting it there would fail validation; every other
+		// profile declares it. Sequence position: right after BuyerOrderReferencedDocument.
+		if (!empty($invoiceData['contractReference']) && $profile !== 'MINIMUM') {
+			$comment = $doc->createComment('Contract reference (BT-12)');
+			$agreement->appendChild($comment);
+
+			$contractRef = $doc->createElement('ram:ContractReferencedDocument');
+			$agreement->appendChild($contractRef);
+			$contractRef->appendChild($doc->createElement('ram:IssuerAssignedID', htmlspecialchars($invoiceData['contractReference'])));
+		}
+
+		// Project reference (BT-11): the project the invoice belongs to. ram:SpecifiedProcuringProject
+		// only exists from EN16931 up, and ProcuringProjectType makes BOTH ram:ID and ram:Name
+		// mandatory, so a project with no title falls back on its reference rather than emit an empty
+		// element. Sequence position: last element of the HeaderTradeAgreement.
+		$project = isset($invoiceData['_project']) ? $invoiceData['_project'] : null;
+		if ($this->isEn16931Profile($profile) && $project instanceof Project && !empty($project->ref)) {
+			$comment = $doc->createComment('Project reference (BT-11)');
+			$agreement->appendChild($comment);
+
+			$procuringProject = $doc->createElement('ram:SpecifiedProcuringProject');
+			$agreement->appendChild($procuringProject);
+			$procuringProject->appendChild($doc->createElement('ram:ID', htmlspecialchars((string) $project->ref)));
+			$projectName = trim((string) $project->title);
+			$procuringProject->appendChild($doc->createElement('ram:Name', htmlspecialchars($projectName !== '' ? $projectName : (string) $project->ref)));
+		}
+
 
 		// DELIVERY
 
@@ -1947,44 +2118,47 @@ class CIIProtocol extends AbstractProtocol
 		$delivery = $doc->createElement('ram:ApplicableHeaderTradeDelivery');
 		$sctt->appendChild($delivery);
 
-		// Add the ship to trade party (mandatory when using intracommunity delivery)
-		// ShipToTradeParty is itself a TradePartyType — populate it directly without
-		// wrapping it in another BuyerTradeParty (which would break XSD validation).
-		// When an external SHIPPING contact with a distinct address is attached to the invoice
-		// (keys filled by buildinvoicelines.inc.php), emit a dedicated deliver-to party (BG-15);
-		// otherwise fall back to the buyer party so the node stays present (upstream behaviour).
-		$shiptotrade = null;
-		if (!empty($invoiceData['_shipFromContactShip'])) {
-			$shiptotrade = $this->buildShipToTradeParty(
-				$doc,
-				$invoiceData['_shipFromContactBill'] ?? array(),
-				$invoiceData['_shipFromContactShip']
-			);
+		// HeaderTradeDeliveryType is declared EMPTY by the MINIMUM schema, so the element must stay
+		// childless there - even a comment or a line feed inside it fails validation.
+		if (!$this->isMinimumProfile($profile)) {
+			// Add the ship to trade party (mandatory when using intracommunity delivery)
+			// ShipToTradeParty is itself a TradePartyType — populate it directly without
+			// wrapping it in another BuyerTradeParty (which would break XSD validation).
+			// When an external SHIPPING contact with a distinct address is attached to the invoice
+			// (keys filled by buildinvoicelines.inc.php), emit a dedicated deliver-to party (BG-15);
+			// otherwise fall back to the buyer party so the node stays present (upstream behaviour).
+			$shiptotrade = null;
+			if (!empty($invoiceData['_shipFromContactShip'])) {
+				$shiptotrade = $this->buildShipToTradeParty(
+					$doc,
+					$invoiceData['_shipFromContactBill'] ?? array(),
+					$invoiceData['_shipFromContactShip']
+				);
+			}
+			if ($shiptotrade !== null) {
+				$delivery->appendChild($shiptotrade);
+			} else {
+				$shiptotrade = $doc->createElement('ram:ShipToTradeParty');
+				$delivery->appendChild($shiptotrade);
+				$this->buildParty($doc, $shiptotrade, $invoiceData, 'buyer', false, true, $profile);
+			}
+
+
+			if (!empty($invoiceData['documentDeliveryDate'])) {
+				$event = $doc->createElement('ram:ActualDeliverySupplyChainEvent');
+				$delivery->appendChild($event);
+
+				$dtNode = $doc->createElement('ram:OccurrenceDateTime');
+				$event->appendChild($dtNode);
+
+				$str = $doc->createElement(
+					'udt:DateTimeString',
+					$invoiceData['documentDeliveryDate']->format('Ymd')
+				);
+				$str->setAttribute('format', '102');
+				$dtNode->appendChild($str);
+			}
 		}
-		if ($shiptotrade !== null) {
-			$delivery->appendChild($shiptotrade);
-		} else {
-			$shiptotrade = $doc->createElement('ram:ShipToTradeParty');
-			$delivery->appendChild($shiptotrade);
-			$this->buildParty($doc, $shiptotrade, $invoiceData, 'buyer', false, true);
-		}
-
-
-		if (!empty($invoiceData['documentDeliveryDate'])) {
-			$event = $doc->createElement('ram:ActualDeliverySupplyChainEvent');
-			$delivery->appendChild($event);
-
-			$dtNode = $doc->createElement('ram:OccurrenceDateTime');
-			$event->appendChild($dtNode);
-
-			$str = $doc->createElement(
-				'udt:DateTimeString',
-				$invoiceData['documentDeliveryDate']->format('Ymd')
-			);
-			$str->setAttribute('format', '102');
-			$dtNode->appendChild($str);
-		}
-
 
 		// Add a XML comment to help debug
 		$comment = $doc->createComment('Footer');
@@ -2000,92 +2174,100 @@ class CIIProtocol extends AbstractProtocol
 			$invoiceData['invoiceCurrency']
 		));
 
-		// Payment mode
-		if (!empty($invoiceData['paymentMeansCode'])) {
-			$comment = $doc->createComment('Payment mode');
-			$settlement->appendChild($comment);
+		// None of these is declared by the MINIMUM schema, whose HeaderTradeSettlementType allows only
+		// ram:InvoiceCurrencyCode and ram:SpecifiedTradeSettlementHeaderMonetarySummation.
+		if (!$this->isMinimumProfile($profile)) {
+			// Payment mode
+			if (!empty($invoiceData['paymentMeansCode'])) {
+				$comment = $doc->createComment('Payment mode');
+				$settlement->appendChild($comment);
 
-			// Payment means
-			$pm = $doc->createElement('ram:SpecifiedTradeSettlementPaymentMeans');
-			$settlement->appendChild($pm);
+				// Payment means
+				$pm = $doc->createElement('ram:SpecifiedTradeSettlementPaymentMeans');
+				$settlement->appendChild($pm);
 
-			$pm->appendChild($doc->createElement('ram:TypeCode', $invoiceData['paymentMeansCode']));		// A code for payment type BT-81 (BG-16)
-			$pm->appendChild($doc->createElement('ram:Information', $invoiceData['paymentMeansText']));		// A label for payment type
+				$pm->appendChild($doc->createElement('ram:TypeCode', $invoiceData['paymentMeansCode']));		// A code for payment type BT-81 (BG-16)
+				if ($this->isEn16931Profile($profile)) {
+					$pm->appendChild($doc->createElement('ram:Information', $invoiceData['paymentMeansText']));	// A label for payment type BT-82
+				}
 
-			$acc = $doc->createElement('ram:PayeePartyCreditorFinancialAccount');
-			$pm->appendChild($acc);
+				$acc = $doc->createElement('ram:PayeePartyCreditorFinancialAccount');
+				$pm->appendChild($acc);
 
-			// CII XSD order for CreditorFinancialAccountType: IBANID, ProprietaryID, AccountName
-			if (!empty($invoiceData['iban'])) {
-				$acc->appendChild($doc->createElement('ram:IBANID', $invoiceData['iban']));					// BT-84
-			} else {
-				// If no IBAN provided
-				if ($invoiceData['paymentMeansCode'] == 30) {	// If payment by credit transfer
-					if (empty($invoiceData['iban_id'])) {
-						throw new Exception($langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBankAcount").'<br>'.$langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBankAcount2"), 1);
-					} else {
-						throw new Exception($langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBAN").'<br>'.$langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBAN2"), 1);
+				// CII XSD order for CreditorFinancialAccountType: IBANID, AccountName, ProprietaryID
+				if (!empty($invoiceData['iban'])) {
+					$acc->appendChild($doc->createElement('ram:IBANID', $invoiceData['iban']));					// BT-84
+				} else {
+					// If no IBAN provided
+					if ($invoiceData['paymentMeansCode'] == 30) {	// If payment by credit transfer
+						if (empty($invoiceData['iban_id'])) {
+							throw new Exception($langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBankAcount").'<br>'.$langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBankAcount2"), 1);
+						} else {
+							throw new Exception($langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBAN").'<br>'.$langs->trans("IBANForSellerMandatoryOnCreditTransferButNotBAN2"), 1);
+						}
 					}
 				}
+				if ($this->isEn16931Profile($profile)) {
+					$acc->appendChild($doc->createElement('ram:AccountName', $invoiceData['accountName']));		// BT-85
+				}
+				if (empty($invoiceData['iban']) && !empty($invoiceData['accountRef'])) {	// If IBAN unknown we can fallback on the private ref.
+					$acc->appendChild($doc->createElement('ram:ProprietaryID', $invoiceData['accountRef']));	// BT-84-0
+				}
+				if (!empty($invoiceData['bic']) && $this->isEn16931Profile($profile)) {
+					$inst = $doc->createElement('ram:PayeeSpecifiedCreditorFinancialInstitution');
+					$pm->appendChild($inst);
+					$inst->appendChild($doc->createElement('ram:BICID', $invoiceData['bic']));					// BT-86
+				}
 			}
-			$acc->appendChild($doc->createElement('ram:AccountName', $invoiceData['accountName']));			// BT-85
-			if (empty($invoiceData['iban']) && !empty($invoiceData['accountRef'])) {	// If IBAN unknown we can fallback on the private ref.
-				$acc->appendChild($doc->createElement('ram:ProprietaryID', $invoiceData['accountRef']));	// BT-84-0
-			}
-			if (!empty($invoiceData['bic'])) {
-				$inst = $doc->createElement('ram:PayeeSpecifiedCreditorFinancialInstitution');
-				$pm->appendChild($inst);
-				$inst->appendChild($doc->createElement('ram:BICID', $invoiceData['bic']));					// BT-86
-			}
-		}
 
-		// VAT array by rate (tax breakdown)
-		foreach ($invoiceData['taxBreakdown'] as $rate => $vals) {		// $rate is 0, 20.0, ..., $vals is an array
+			// VAT array by rate (tax breakdown)
+			foreach ($invoiceData['taxBreakdown'] as $rate => $vals) {		// $rate is 0, 20.0, ..., $vals is an array
+				// Add comment
+				$comment = $doc->createComment('VAT rate: '.$vals['tva_tx'].', VAT src code: '.$vals['vat_src_code'].', ExemptionReasonCode: '.$vals['ExemptionReasonCode']);
+				$settlement->appendChild($comment);
+
+				$settlement->appendChild(
+					$this->buildTaxNode($doc, $rate, $vals, $invoiceData['invoiceCurrency'], $invoiceData['vatDueDateTypeCode'] ?? '') 	// ApplicableTradeTax
+				);
+			}
+
+			// Discounts
+			if (!empty($invoiceData['_globalDiscounts'])) {
+				$comment = $doc->createComment('Global discounts');
+				$settlement->appendChild($comment);
+				foreach ($invoiceData['_globalDiscounts'] as $globaldiscount) {
+					$discount = [
+						'amount' => number_format($globaldiscount['value'], 2, '.', ''),
+						'reason' => $globaldiscount['reason'],
+						'code' => '95',
+						'taxCategory' => $globaldiscount['categoryVAT'],
+						'taxRate' => $globaldiscount['taxRate'], // The tax rate for the discount is the same as the line tax rate. This is a common practice but not mandatory.
+					];
+					$this->addHeaderDiscount($doc, $settlement, $discount);
+				}
+			}
+
+
+			// Payment terms
+
 			// Add comment
-			$comment = $doc->createComment('VAT rate: '.$vals['tva_tx'].', VAT src code: '.$vals['vat_src_code'].', ExemptionReasonCode: '.$vals['ExemptionReasonCode']);
+			$comment = $doc->createComment('Payment terms');
 			$settlement->appendChild($comment);
 
-			$settlement->appendChild(
-				$this->buildTaxNode($doc, $rate, $vals, $invoiceData['invoiceCurrency'], $invoiceData['vatDueDateTypeCode'] ?? '') 	// ApplicableTradeTax
-			);
-		}
+			$terms = $doc->createElement('ram:SpecifiedTradePaymentTerms');
+			$settlement->appendChild($terms);
 
-		// Discounts
-		if (!empty($invoiceData['_globalDiscounts'])) {
-			$comment = $doc->createComment('Global discounts');
-			$settlement->appendChild($comment);
-			foreach ($invoiceData['_globalDiscounts'] as $globaldiscount) {
-				$discount = [
-					'amount' => number_format($globaldiscount['value'], 2, '.', ''),
-					'reason' => $globaldiscount['reason'],
-					'code' => '95',
-					'taxCategory' => $globaldiscount['categoryVAT'],
-					'taxRate' => $globaldiscount['taxRate'], // The tax rate for the discount is the same as the line tax rate. This is a common practice but not mandatory.
-				];
-				$this->addHeaderDiscount($doc, $settlement, $discount);
+			$terms->appendChild($doc->createElement('ram:Description', $invoiceData['paymentTermsText']));
+
+			// Due date is optional (e.g. immediate payment); guard against a null date to avoid a fatal on ->format().
+			if (!empty($invoiceData['paymentDueDate'])) {
+				$dtNode = $doc->createElement('ram:DueDateDateTime');
+				$str = $doc->createElement('udt:DateTimeString', $invoiceData['paymentDueDate']->format('Ymd'));
+				$str->setAttribute('format', '102');
+				$dtNode->appendChild($str);
+
+				$terms->appendChild($dtNode);
 			}
-		}
-
-
-		// Payment terms
-
-		// Add comment
-		$comment = $doc->createComment('Payment terms');
-		$settlement->appendChild($comment);
-
-		$terms = $doc->createElement('ram:SpecifiedTradePaymentTerms');
-		$settlement->appendChild($terms);
-
-		$terms->appendChild($doc->createElement('ram:Description', $invoiceData['paymentTermsText']));
-
-		// Due date is optional (e.g. immediate payment); guard against a null date to avoid a fatal on ->format().
-		if (!empty($invoiceData['paymentDueDate'])) {
-			$dtNode = $doc->createElement('ram:DueDateDateTime');
-			$str = $doc->createElement('udt:DateTimeString', $invoiceData['paymentDueDate']->format('Ymd'));
-			$str->setAttribute('format', '102');
-			$dtNode->appendChild($str);
-
-			$terms->appendChild($dtNode);
 		}
 
 		// Totals
@@ -2097,9 +2279,13 @@ class CIIProtocol extends AbstractProtocol
 		$sum = $doc->createElement('ram:SpecifiedTradeSettlementHeaderMonetarySummation');
 		$settlement->appendChild($sum);
 
-		$sum->appendChild($doc->createElement('ram:LineTotalAmount', number_format($invoiceData['lineTotalAmount'], 2, '.', '')));
-		$sum->appendChild($doc->createElement('ram:ChargeTotalAmount', number_format($invoiceData['chargeTotalAmount'], 2, '.', '')));
-		$sum->appendChild($doc->createElement('ram:AllowanceTotalAmount', number_format($invoiceData['allowanceTotalAmount'], 2, '.', '')));
+		// The MINIMUM schema declares only four amounts in TradeSettlementHeaderMonetarySummationType:
+		// the tax basis, the tax total, the grand total and the amount due.
+		if (!$this->isMinimumProfile($profile)) {
+			$sum->appendChild($doc->createElement('ram:LineTotalAmount', number_format($invoiceData['lineTotalAmount'], 2, '.', '')));
+			$sum->appendChild($doc->createElement('ram:ChargeTotalAmount', number_format($invoiceData['chargeTotalAmount'], 2, '.', '')));
+			$sum->appendChild($doc->createElement('ram:AllowanceTotalAmount', number_format($invoiceData['allowanceTotalAmount'], 2, '.', '')));
+		}
 		$sum->appendChild($doc->createElement('ram:TaxBasisTotalAmount', number_format($invoiceData['taxBasisTotalAmount'], 2, '.', '')));
 
 		$taxTotal = $doc->createElement('ram:TaxTotalAmount', number_format($invoiceData['taxTotalAmount'], 2, '.', ''));
@@ -2107,30 +2293,46 @@ class CIIProtocol extends AbstractProtocol
 		$sum->appendChild($taxTotal);
 
 		$sum->appendChild($doc->createElement('ram:GrandTotalAmount', number_format($invoiceData['grandTotalAmount'], 2, '.', '')));
-		$sum->appendChild($doc->createElement('ram:TotalPrepaidAmount', number_format($invoiceData['totalPrepaidAmount'], 2, '.', '')));
+		if (!$this->isMinimumProfile($profile)) {
+			$sum->appendChild($doc->createElement('ram:TotalPrepaidAmount', number_format($invoiceData['totalPrepaidAmount'], 2, '.', '')));
+		}
 		$sum->appendChild($doc->createElement('ram:DuePayableAmount', number_format($invoiceData['duePayableAmount'], 2, '.', '')));
 
-		// Referenced documents BG-3
-		if (!empty($invoiceData['invoiceRefDocs'])) {
-			foreach ($invoiceData['invoiceRefDocs'] as $refDoc) {
-				$refNode = $doc->createElement('ram:InvoiceReferencedDocument');
+		// BG-3 is not declared by the MINIMUM schema: its HeaderTradeSettlementType allows only the
+		// currency and the monetary summation.
+		if (!$this->isMinimumProfile($profile)) {
+			// Referenced documents BG-3
+			if (!empty($invoiceData['invoiceRefDocs'])) {
+				foreach ($invoiceData['invoiceRefDocs'] as $refDoc) {
+					$refNode = $doc->createElement('ram:InvoiceReferencedDocument');
 
-				$refNode->appendChild($doc->createElement('ram:IssuerAssignedID', $refDoc['ref']));
-				if ($profile === 'EXTENDED') {
-					$refNode->appendChild($doc->createElement('ram:TypeCode', $refDoc['type']));
+					$refNode->appendChild($doc->createElement('ram:IssuerAssignedID', $refDoc['ref']));
+
+					// The document type (BT-X-...) is a fatal error under EN 16931, where CII-DT-018 only
+					// tolerates a TypeCode on an AdditionalReferencedDocument. The EXTENDED and
+					// EXTENDED-CTC-FR profiles reinstate it (CII-EXT-DT-018).
+					if ($this->isExtendedProfile($profile)) {
+						$refNode->appendChild($doc->createElement('ram:TypeCode', $refDoc['type']));
+					}
+
+					// The issue date of the preceding invoice (BT-26) is part of BG-3 in EN 16931, where
+					// CII-DT-027 exempts InvoiceReferencedDocument from the ban on FormattedIssueDateTime.
+					// The French CTC-FR rule BR-FR-CO-05 makes it mandatory, with a "fatal" flag: a credit
+					// note (BT-3 = 381) whose reference carries no date is rejected. So it belongs to every
+					// profile, not only to EXTENDED.
+					if (!empty($refDoc['date'])) {
+						$dateNode = $doc->createElement('ram:FormattedIssueDateTime');
+						$str = $doc->createElement('qdt:DateTimeString', $refDoc['date']->format('Ymd'));
+						$str->setAttribute('format', '102');
+						$dateNode->appendChild($str);
+						$refNode->appendChild($dateNode);
+					}
+
+					$settlement->appendChild($refNode);
 				}
-
-				if (!empty($refDoc['date']) && $profile === 'EXTENDED') {
-					$dateNode = $doc->createElement('ram:FormattedIssueDateTime');
-					$str = $doc->createElement('qdt:DateTimeString', $refDoc['date']->format('Ymd'));
-					$str->setAttribute('format', '102');
-					$dateNode->appendChild($str);
-					$refNode->appendChild($dateNode);
-				}
-
-				$settlement->appendChild($refNode);
 			}
 		}
+
 		$xml = $doc->saveXML();
 
 		return $xml;
@@ -2286,10 +2488,11 @@ class CIIProtocol extends AbstractProtocol
 	 * @param string      		$type      		'seller' or 'buyer'
 	 * @param bool        		$wrap			Whether to wrap in SellerTradeParty/BuyerTradeParty (true for main parties, false for ship to party)
 	 * @param bool        		$minimal		Whether to emit only mandatory fields (used for building the ShipToTradeParty)
+	 * @param string      		$profile   		Profile being built, to skip the groups it does not define
 	 *
 	 * @return void
 	 */
-	private function buildParty($doc, $agreement, $data, $type, $wrap = true, $minimal = false)
+	private function buildParty($doc, $agreement, $data, $type, $wrap = true, $minimal = false, $profile = '')
 	{
 		if ($wrap) {
 			$tag = $type === 'seller' ? 'ram:SellerTradeParty' : 'ram:BuyerTradeParty';
@@ -2302,14 +2505,18 @@ class CIIProtocol extends AbstractProtocol
 		$prefix = $type;
 
 		// ID / GlobalID — only one of the two may be present. If GlobalID is present, omit the ID to avoid XSD validation errors
-		if (!empty($data[$prefix . 'GlobalIds'])) {
-			foreach ($data[$prefix . 'GlobalIds'] as $globalId) {
-				$g = $doc->createElement('ram:GlobalID', $globalId['value']);
-				$g->setAttribute('schemeID', $globalId['schemeID']);
-				$node->appendChild($g);
+		// The MINIMUM schema declares neither: its TradePartyType starts at ram:Name, and the party is
+		// identified there by its ram:SpecifiedLegalOrganization/ram:ID instead.
+		if (!$this->isMinimumProfile($profile)) {
+			if (!empty($data[$prefix . 'GlobalIds'])) {
+				foreach ($data[$prefix . 'GlobalIds'] as $globalId) {
+					$g = $doc->createElement('ram:GlobalID', $globalId['value']);
+					$g->setAttribute('schemeID', $globalId['schemeID']);
+					$node->appendChild($g);
+				}
+			} else {
+				$node->appendChild($doc->createElement('ram:ID', $data[$prefix . 'ids']));
 			}
-		} else {
-			$node->appendChild($doc->createElement('ram:ID', $data[$prefix . 'ids']));
 		}
 
 		$node->appendChild($doc->createElement('ram:Name', htmlspecialchars($data[$prefix . 'name'])));
@@ -2321,9 +2528,12 @@ class CIIProtocol extends AbstractProtocol
 			$id = $doc->createElement('ram:ID', $data[$prefix . 'LegalOrgId']);
 			$id->setAttribute('schemeID', $data[$prefix . 'LegalOrgScheme']);
 			$legal->appendChild($id);
-			$legal->appendChild(
-				$doc->createElement('ram:TradingBusinessName', $data[$prefix . 'TradingName'])
-			);
+			// LegalOrganizationType is reduced to ram:ID by the MINIMUM schema
+			if (!$this->isMinimumProfile($profile)) {
+				$legal->appendChild(
+					$doc->createElement('ram:TradingBusinessName', $data[$prefix . 'TradingName'])
+				);
+			}
 		}
 
 		// Contact
@@ -2336,6 +2546,7 @@ class CIIProtocol extends AbstractProtocol
 		// and the CII syntax binding forbids ram:FaxUniversalCommunication (CII-SR-236 / CII-SR-265),
 		// so a party known only by its fax gets no contact block at all.
 		if (!$minimal
+			&& $this->isEn16931Profile($profile)
 			&& (!empty($data[$prefix . 'contactpersonname'])
 			|| !empty($data[$prefix . 'contactdepartmentname'])
 			|| !empty($data[$prefix . 'contactphoneno'])
@@ -2373,15 +2584,18 @@ class CIIProtocol extends AbstractProtocol
 		$addr = $doc->createElement('ram:PostalTradeAddress');
 		$node->appendChild($addr);
 
-		$addr->appendChild($doc->createElement('ram:PostcodeCode', $data[$prefix . 'postcode']));
-		if (!empty($data[$prefix . 'lineone'])) {
-			$addr->appendChild($doc->createElement('ram:LineOne', htmlspecialchars($data[$prefix . 'lineone'])));
+		// TradeAddressType is reduced to the country code by the MINIMUM schema
+		if (!$this->isMinimumProfile($profile)) {
+			$addr->appendChild($doc->createElement('ram:PostcodeCode', $data[$prefix . 'postcode']));
+			if (!empty($data[$prefix . 'lineone'])) {
+				$addr->appendChild($doc->createElement('ram:LineOne', htmlspecialchars($data[$prefix . 'lineone'])));
+			}
+			$addr->appendChild($doc->createElement('ram:CityName', htmlspecialchars($data[$prefix . 'city'])));
 		}
-		$addr->appendChild($doc->createElement('ram:CityName', htmlspecialchars($data[$prefix . 'city'])));
 		$addr->appendChild($doc->createElement('ram:CountryID', $data[$prefix . 'country']));
 
-		// URIUniversalCommunication
-		if (!$minimal && !empty($data[$prefix . 'CommunicationUriScheme']) && !empty($data[$prefix . 'CommunicationUri'])) {
+		// URIUniversalCommunication. Not declared by the MINIMUM schema.
+		if (!$minimal && !$this->isMinimumProfile($profile) && !empty($data[$prefix . 'CommunicationUriScheme']) && !empty($data[$prefix . 'CommunicationUri'])) {
 			$uri = $doc->createElement('ram:URIUniversalCommunication');
 			$node->appendChild($uri);
 			$uriid = $doc->createElement('ram:URIID', $data[$prefix . 'CommunicationUri']);			// Example 315143296_1939

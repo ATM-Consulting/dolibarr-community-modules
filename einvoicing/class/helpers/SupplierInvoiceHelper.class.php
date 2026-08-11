@@ -394,12 +394,15 @@ class SupplierInvoiceHelper
 	 *
 	 * @param int 	$supplierInvoiceId 				The id of the supplier invoice
 	 * @param bool 	$checkLinkedDolObjectExistance 	Also check if linked Dol object really exists or not
-	 * @throws Exception
+	 * @param bool 	$duplicate 						Set to true when several e-invoicing documents describe the
+	 *												same supplier invoice, so the caller can refuse the operation
 	 * @return bool									True if invoice found.
 	 */
-	public static function isEInvoice(int $supplierInvoiceId, bool $checkLinkedDolObjectExistance = false): bool
+	public static function isEInvoice(int $supplierInvoiceId, bool $checkLinkedDolObjectExistance = false, bool &$duplicate = false): bool
 	{
 		global $db;
+
+		$duplicate = false;
 
 		$sql = "SELECT rowid FROM " . $db->prefix() . "einvoicing_document";
 		$sql .= " WHERE fk_element_type = 'invoice_supplier'";
@@ -408,25 +411,35 @@ class SupplierInvoiceHelper
 		$sql .= " LIMIT 2";
 
 		$resql = $db->query($sql);
-		if ($resql) {
-			if ($db->num_rows($resql) == 1) {
-				$db->free($resql);
-				if ($checkLinkedDolObjectExistance) {
-					$factureFournisseur = new FactureFournisseur($db);
-					if ($factureFournisseur->fetch((int) $supplierInvoiceId) > 0) {
-						return true;
-					}
-				} else {
-					return true;
-				}
-			} elseif ($db->num_rows($resql) > 1) {
-				$db->free($resql);
-				throw new Exception('Duplicate entry in einvoicing_document for supplier invoice with id '.$supplierInvoiceId);
-			} else {
-				$db->free($resql);
-			}
+		if (!$resql) {
+			return false;
 		}
-		return false;
+
+		$num = $db->num_rows($resql);
+		$db->free($resql);
+
+		if ($num > 1) {
+			// Several e-invoicing documents for the same supplier invoice is a data integrity problem that
+			// needs a manual fix in database: the same invoice may hold diverging statuses coming from two
+			// access points. The answer to "is this an e-invoice" is still yes, so this predicate says yes
+			// and reports the duplicate. Throwing from here would not help: run_triggers() calls runTrigger()
+			// without a try/catch, so the exception used to surface as an uncaught PHP fatal instead of the
+			// message the user needs. Refusing the operation belongs to the caller.
+			$duplicate = true;
+			dol_syslog(__METHOD__ . ' duplicate entry in einvoicing_document for supplier invoice with id ' . $supplierInvoiceId, LOG_ERR);
+		}
+
+		if ($num <= 0) {
+			return false;
+		}
+
+		if ($checkLinkedDolObjectExistance) {
+			$factureFournisseur = new FactureFournisseur($db);
+
+			return ($factureFournisseur->fetch((int) $supplierInvoiceId) > 0);
+		}
+
+		return true;
 	}
 
 	/**
@@ -477,6 +490,72 @@ class SupplierInvoiceHelper
 			dol_syslog(__METHOD__ . ' Failed to abandon supplier invoice id ' . $object->id . ' : ' . implode(', ', $object->errors), LOG_ERR);
 			return -1;
 		}
+
+		return 1;
+	}
+
+	/**
+	 * Close the supplier invoice that a newly validated replacement invoice replaces.
+	 *
+	 * Dolibarr does this on the customer side - Facture::validate() cancels the replaced invoice with
+	 * the close code "replaced" - but FactureFournisseur::validate() does not, so a replaced supplier
+	 * invoice stayed validated, with nothing saying it had been superseded and nothing stopping it
+	 * from being paid a second time (issue #549).
+	 *
+	 * Scope. Only the invoices this module is responsible for are touched, i.e. those exchanged
+	 * through the platform: either the replacement or the invoice it replaces has to be an e-invoice.
+	 * A replacement recorded by hand between two ordinary supplier invoices is left to the core.
+	 *
+	 * Three states are deliberately left alone:
+	 * - a paid replaced invoice, because abandoning it would contradict the payment already recorded;
+	 * - a draft one, which cannot be paid nor transferred to accountancy anyway, and which validating
+	 *   just to cancel would give a reference it never earned;
+	 * - one already closed by this same rule, so the method is idempotent.
+	 *
+	 * @param	FactureFournisseur	$replacement	Replacement invoice that has just been validated
+	 * @param	User				$user			User validating it
+	 * @return	int									1 if the replaced invoice was closed, 0 if there was nothing to do, -1 on error
+	 */
+	public static function closeReplacedSupplierInvoice(FactureFournisseur $replacement, User $user)
+	{
+		global $db;
+
+		if ((int) $replacement->type !== FactureFournisseur::TYPE_REPLACEMENT || empty($replacement->fk_facture_source)) {
+			return 0;
+		}
+
+		$sourceId = (int) $replacement->fk_facture_source;
+
+		if (!self::isEInvoice((int) $replacement->id) && !self::isEInvoice($sourceId)) {
+			return 0;
+		}
+
+		$source = new FactureFournisseur($db);
+		if ($source->fetch($sourceId) <= 0) {
+			dol_syslog(__METHOD__ . ' Cannot load the supplier invoice id ' . $sourceId . ' replaced by id ' . $replacement->id, LOG_ERR, 0, '_einvoicing');
+			return -1;
+		}
+
+		if ($source->status == FactureFournisseur::STATUS_ABANDONED && $source->close_code == FactureFournisseur::CLOSECODE_REPLACED) {
+			return 0;
+		}
+
+		if (!empty($source->paid) || $source->status == FactureFournisseur::STATUS_CLOSED) {
+			dol_syslog(__METHOD__ . ' Supplier invoice id ' . $sourceId . ' is replaced by id ' . $replacement->id . ' but is already paid: left as it is', LOG_WARNING, 0, '_einvoicing');
+			return 0;
+		}
+
+		if ($source->status == FactureFournisseur::STATUS_DRAFT) {
+			dol_syslog(__METHOD__ . ' Supplier invoice id ' . $sourceId . ' is replaced by id ' . $replacement->id . ' but is still a draft: left as it is', LOG_INFO, 0, '_einvoicing');
+			return 0;
+		}
+
+		if ($source->setCanceled($user, FactureFournisseur::CLOSECODE_REPLACED, '') < 0) {
+			dol_syslog(__METHOD__ . ' Failed to close the supplier invoice id ' . $sourceId . ' replaced by id ' . $replacement->id . ' : ' . implode(', ', (array) $source->errors), LOG_ERR, 0, '_einvoicing');
+			return -1;
+		}
+
+		dol_syslog(__METHOD__ . ' Supplier invoice id ' . $sourceId . ' closed as replaced by id ' . $replacement->id, LOG_DEBUG, 0, '_einvoicing');
 
 		return 1;
 	}

@@ -150,8 +150,8 @@ class FacturXProtocol extends CIIProtocol
 			 *   documentNotePMT: string,
 			 *   documentNotePMD: string,
 			 *   documentNoteAAB: string,
-		 *   documentNoteTXD: string,
-		 *   vatDueDateTypeCode: string,
+			 *   documentNoteTXD: string,
+			 *   vatDueDateTypeCode: string,
 			 *   documentNotes: array,
 			 *   sellername: string,
 			 *   sellerids: string,
@@ -471,8 +471,10 @@ class FacturXProtocol extends CIIProtocol
 					$facturxpdf->setDocumentInvoiceReferencedDocument($lineData['depositInvoiceRef'], ZugferdInvoiceType::PREPAYMENTINVOICE, $lineData['depositInvoiceDate']);
 				}
 
-				// Set billing period for the line
-				if ($lineData['linePeriodStart'] !== null && $lineData['linePeriodEnd'] !== null) {
+				// Set billing period for the line (BG-26 / BT-134 / BT-135). One date alone is a valid
+				// period: BR-CO-20 asks for the start date or the end date, "or both". The builder
+				// leaves out the side it is given as null, so the same condition as the CII path applies.
+				if ($lineData['linePeriodStart'] !== null || $lineData['linePeriodEnd'] !== null) {
 					$facturxpdf->setDocumentPositionBillingPeriod($lineData['linePeriodStart'], $lineData['linePeriodEnd']);
 				}
 
@@ -576,7 +578,7 @@ class FacturXProtocol extends CIIProtocol
 
 			// Local EN 16931 business rules safety net on the final XML (warnings, or abort in strict mode),
 			// same as the native builder branch above, so the external builder is covered too.
-			$this->checkBusinessRules(file_get_contents($xmlfile));
+			$this->checkBusinessRules(file_get_contents($xmlfile), $invoice);
 
 			dolChmod($xmlfile);
 
@@ -888,9 +890,12 @@ class FacturXProtocol extends CIIProtocol
 		$outputlangs = $langs;		// TODO Use the target language
 		$outputlangs->load("einvoicing@einvoicing");
 
-		require __DIR__ . "/ExampleHelpers.php";
+		// require_once, not require: this file declares plain functions, so loading it a second time
+		// in the same PHP request is a fatal redeclare - which is what happens as soon as two samples
+		// are generated in one request, and a fatal error is not something the caller can catch.
+		require_once __DIR__ . "/ExampleHelpers.php";
 
-		$existingPdfFilename = __DIR__ . "/../../assets/00_ZugferdDocumentPdfBuilder_PrintLayout.pdf";
+		$existingPdfFilename = __DIR__ . "/../../doc/00_ZugferdDocumentPdfBuilder_PrintLayout.pdf";
 		$newPdfFilename = $conf->einvoicing->dir_temp . "/INVTEST-".dol_print_date(dol_now(), '%y%m%d-%H%M%S').".pdf";
 		//$AdditionalDocument = __DIR__ . "/../../assets/00_AdditionalDocument.csv";
 
@@ -1367,6 +1372,7 @@ class FacturXProtocol extends CIIProtocol
 		// with that error carry its socid, so a rolled back vendor makes them point to a thirdparty that
 		// never existed.
 		$db->begin();
+		$this->openedTransactions++;
 
 		$syncSocRes = $this->_syncOrCreateThirdpartyFromEInvoiceSeller($parsedHeader, 'dolibarr', $flowId);
 
@@ -1374,6 +1380,7 @@ class FacturXProtocol extends CIIProtocol
 		$return_messages[] = $syncSocRes['message'];
 		if ($socId < 0) {
 			$db->rollback();
+			$this->openedTransactions--;
 			return [
 				'res' => -1,
 				'message' => 'Thirdparty sync or creation error: ' . implode("<br>\n", $return_messages),
@@ -1385,11 +1392,13 @@ class FacturXProtocol extends CIIProtocol
 		}
 
 		$db->commit();
+		$this->openedTransactions--;
 
 		// From this point on, everything belongs to the invoice import (products, invoice, lines) and
 		// stays atomic. This second transaction is closed (commit or rollback) by
 		// createSupplierInvoiceFromSource(), the public wrapper.
 		$db->begin();
+		$this->openedTransactions++;
 
 		// Load supplier (thirdparty)
 		require_once DOL_DOCUMENT_ROOT . '/fourn/class/fournisseur.class.php';
@@ -1445,8 +1454,10 @@ class FacturXProtocol extends CIIProtocol
 		// documentdate is already formatted into 'Y-m-d' by the parser ZugFerd and CII
 		$supplierInvoice->date = !empty($parsedHeader['documentdate']) ? dol_stringtotime($parsedHeader['documentdate']) : null;
 
-		// For credit notes, link to the source invoice via fk_facture_source (BT-25)
-		if ($supplierInvoice->type == FactureFournisseur::TYPE_CREDIT_NOTE && !empty($parsedHeader['invoiceRefDocs']) && is_array($parsedHeader['invoiceRefDocs'])) {
+		// For credit notes and replacement invoices, link to the source invoice via fk_facture_source
+		// (BT-25). A replacement invoice (BT-3 = 384) corrects the invoice it references just as a credit
+		// note cancels it, and Dolibarr stores that source in the same field for both.
+		if (in_array($supplierInvoice->type, array(FactureFournisseur::TYPE_CREDIT_NOTE, FactureFournisseur::TYPE_REPLACEMENT)) && !empty($parsedHeader['invoiceRefDocs']) && is_array($parsedHeader['invoiceRefDocs'])) {
 			$firstRefDoc = reset($parsedHeader['invoiceRefDocs']);
 			$refSourceSupplier = !empty($firstRefDoc['IssuerAssignedID']) ? (string) $firstRefDoc['IssuerAssignedID'] : '';
 			if ($refSourceSupplier !== '') {
@@ -1456,9 +1467,9 @@ class FacturXProtocol extends CIIProtocol
 					$objSource = $db->fetch_object($resqlSource);
 					if ($objSource) {
 						$supplierInvoice->fk_facture_source = (int) $objSource->rowid;
-						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Credit note linked to source invoice id=' . $supplierInvoice->fk_facture_source, LOG_DEBUG);
+						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Linked to source invoice id=' . $supplierInvoice->fk_facture_source, LOG_DEBUG);
 					} else {
-						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Source invoice ref_supplier="' . $refSourceSupplier . '" not found for credit note ' . ($parsedHeader['documentno'] ?? ''), LOG_WARNING);
+						dol_syslog(get_class($this) . '::doCreateSupplierInvoiceFromSource Source invoice ref_supplier="' . $refSourceSupplier . '" not found for ' . ($parsedHeader['documentno'] ?? ''), LOG_WARNING);
 					}
 				}
 			}
