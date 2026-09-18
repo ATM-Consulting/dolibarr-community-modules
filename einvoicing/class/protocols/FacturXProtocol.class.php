@@ -914,6 +914,14 @@ class FacturXProtocol extends CIIProtocol
 				}
 			}
 
+			// Insert document level charges (BG-21) as lines of this supplier invoice
+			if (!empty($parsedHeader['headerAllowancesCharges'])) {
+				$chargeRes = $this->createHeaderChargeLines($supplierInvoiceId, $parsedHeader['headerAllowancesCharges'], $return_messages);
+				if ($chargeRes['res'] < 0) {
+					return $chargeRes;
+				}
+			}
+
 			// Every line of the invoice exists now, so its totals can be confronted with the ones the
 			// document announces (issue #781).
 			$this->alignInvoiceTotalsWithDocument($supplierInvoiceId, $parsedHeader, $return_messages);
