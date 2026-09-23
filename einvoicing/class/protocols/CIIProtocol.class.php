@@ -1280,7 +1280,7 @@ class CIIProtocol extends AbstractProtocol
 						// missing deposit, and stepping over it would import an invoice short of its
 						// deduction. The flow is postponed - nothing is stored, syncFlow() rolls back, and
 						// the next run takes it again, the way BG-3 is already handled at document level.
-						if (abs((float) ($parsedHeader['totalPrepaidAmount'] ?? 0)) > 0) {
+						if ($this->depositAnnouncedByDocument($parsedHeader) > 0) {
 							return $this->postponeForMissingLineDocument((string) $lineRefDocId, (string) $parsedLine['lineid'], (int) $parsedLine['supplierId'], $parsedHeader);
 						}
 
@@ -1463,6 +1463,26 @@ class CIIProtocol extends AbstractProtocol
 
 		return ['res' => 1];
 	}
+
+	/**
+	 * Amount the document declares already paid that the import still has to attach (BT-113).
+	 *
+	 * BR-FR-CO-09 reads BT-23 in B2, S2 or M2 as "invoice already paid": nothing is missing from such an
+	 * invoice, so nothing is waited for.
+	 *
+	 * @param	array<string,mixed>	$parsedHeader	Parsed header of the received document
+	 * @return	float								The amount still to attach, 0 when there is none to look for
+	 */
+	protected function depositAnnouncedByDocument(array $parsedHeader): float
+	{
+		$announced = abs((float) ($parsedHeader['totalPrepaidAmount'] ?? 0));
+		if ($announced < 0.005 || in_array((string) ($parsedHeader['businessProcessId'] ?? ''), ['B2', 'S2', 'M2'], true)) {
+			return 0.0;
+		}
+
+		return $announced;
+	}
+
 	/**
 	 * Postpone the flow because a line points at an invoice this Dolibarr does not hold while the document
 	 * declares an amount already paid.
