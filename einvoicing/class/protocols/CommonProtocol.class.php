@@ -674,6 +674,8 @@ trait CommonProtocol
 
 			$thirdparty = new Societe($db);
 			$thirdparty->fetch($thirdpartyId);
+			// Societe::update() only tolerates a code out of the numbering mask when oldcopy holds it unchanged.
+			$thirdparty->oldcopy = dol_clone($thirdparty, 2);
 
 			// Update thirdparty information based on priority
 			if (getDolGlobalInt('EINVOICING_THIRDPARTIES_COMPLETE_INFO')) {
@@ -788,6 +790,7 @@ trait CommonProtocol
 
 				$plainthirdparty = new Societe($db);
 				if ($plainthirdparty->fetch($thirdpartyId) > 0) {
+					$plainthirdparty->oldcopy = dol_clone($plainthirdparty, 2);
 					$allowmodcodeclient = 0;
 					$allowmodcodefournisseur = 0;
 					$this->_prepareThirdpartyForImportUpdate($plainthirdparty, $allowmodcodeclient, $allowmodcodefournisseur);
