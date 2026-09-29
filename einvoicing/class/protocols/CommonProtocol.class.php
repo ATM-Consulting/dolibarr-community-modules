@@ -1029,6 +1029,29 @@ trait CommonProtocol
 	}
 
 	/**
+	 * Remove from the header the referenced documents (BG-3) that repeat the document's own number (BT-1).
+	 *
+	 * @param	array<string,mixed>	$parsedHeader		Parsed document header, updated
+	 * @param	string[]			$return_messages	Import messages, one appended per reference removed
+	 * @return	void
+	 */
+	private function _dropSelfReferencedDocuments(array &$parsedHeader, array &$return_messages)
+	{
+		$documentno = trim((string) ($parsedHeader['documentno'] ?? ''));
+		if ($documentno === '' || empty($parsedHeader['invoiceRefDocs']) || !is_array($parsedHeader['invoiceRefDocs'])) {
+			return;
+		}
+
+		foreach ($parsedHeader['invoiceRefDocs'] as $key => $invoiceRefDoc) {
+			if (trim((string) ($invoiceRefDoc['IssuerAssignedID'] ?? '')) === $documentno) {
+				unset($parsedHeader['invoiceRefDocs'][$key]);
+				$return_messages[] = 'Document ' . dol_escape_htmltag($documentno) . ' names itself as the invoice it follows; the reference was ignored.';
+				dol_syslog(get_class($this) . '::_dropSelfReferencedDocuments Stepping over self-referencing InvoiceReferencedDocument for ' . $documentno, LOG_WARNING);
+			}
+		}
+	}
+
+	/**
 	 * Extract the phone number out of what a received document carries as a phone or fax number.
 	 *
 	 * The telephone number of the seller contact (BT-42) is a Text, and so is the fax number the
