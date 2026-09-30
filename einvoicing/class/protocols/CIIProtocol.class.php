@@ -923,6 +923,8 @@ class CIIProtocol extends AbstractProtocol
 			return ['res' => $supplierInvoiceId, 'message' => implode("\n", $return_messages)];
 		}
 
+		$this->_dropSelfReferencedDocuments($parsedHeader, $return_messages);
+
 		// Check if all referenced documents in the invoice exist in Dolibarr for the same supplier, if not return with error since we need them for correct linking in the invoice
 		if (!empty($parsedHeader['invoiceRefDocs']) && is_array($parsedHeader['invoiceRefDocs'])) {
 			foreach ($parsedHeader['invoiceRefDocs'] as $invoiceRefDoc) {

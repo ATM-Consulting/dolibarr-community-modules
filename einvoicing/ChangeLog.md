@@ -2,6 +2,14 @@
 
 
 
+## 1.2.0_rfe
+
+Backports on top of 1.2.0, for an instance that cannot move to 1.3.0 yet (ATM ticket DA028865).
+
+FIX: DA028865 [einvoicing] An invoice naming itself as the one it follows is imported (backport of #927)
+FIX: DA028865 [einvoicing] A supplier Dolibarr refuses to update no longer stops the synchronization (cherry-pick of da24d284)
+
+
 ## 1.2.0
 
 FIX: #853 [einvoicing] The dates of a received document keep the day they state
