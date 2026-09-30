@@ -119,9 +119,10 @@ class SelfReferencedDocumentTest extends CommonClassTest
 	 * Generate a CII document carrying one BG-3 reference.
 	 *
 	 * @param	string|null	$reference	BT-25 to write, null for the document's own BT-1
+	 * @param	string|null	$paidTypeCode	BT-3 to write on a document whose whole amount is already paid (BT-113), null to leave it unpaid
 	 * @return	string					The document
 	 */
-	private function referencingDocument($reference = null)
+	private function referencingDocument($reference = null, $paidTypeCode = null)
 	{
 		global $db, $langs, $mysoc, $user;
 
@@ -163,14 +164,29 @@ class SelfReferencedDocumentTest extends CommonClassTest
 		$node->appendChild($dom->createElementNS(self::RAM, 'ram:IssuerAssignedID', $reference ?? $documentno));
 		$settlement->appendChild($node);
 
+		if ($paidTypeCode !== null) {
+			$xpath->query('/rsm:CrossIndustryInvoice/rsm:ExchangedDocument/ram:TypeCode')->item(0)->textContent = $paidTypeCode;
+			$summation = $xpath->query('//ram:SpecifiedTradeSettlementHeaderMonetarySummation')->item(0);
+			$grandTotal = $xpath->query('ram:GrandTotalAmount', $summation)->item(0)->textContent;
+			$due = $xpath->query('ram:DuePayableAmount', $summation)->item(0);
+			$prepaid = $xpath->query('ram:TotalPrepaidAmount', $summation)->item(0);
+			if ($prepaid === null) {
+				$prepaid = $dom->createElementNS(self::RAM, 'ram:TotalPrepaidAmount');
+				$summation->insertBefore($prepaid, $due);
+			}
+			$prepaid->textContent = $grandTotal;
+			$due->textContent = '0.00';
+		}
+
 		return (string) $dom->saveXML();
 	}
 
 	/**
 	 * @param	string|null	$reference	BT-25 to write, null for the document's own BT-1
+	 * @param	string|null	$paidTypeCode	BT-3 of a document whose whole amount is already paid, null to leave it unpaid
 	 * @return	array<string,mixed>		What the import answered
 	 */
-	private function importReferencingDocument($reference)
+	private function importReferencingDocument($reference, $paidTypeCode = null)
 	{
 		global $conf, $db, $mysoc, $user;
 
@@ -184,7 +200,7 @@ class SelfReferencedDocumentTest extends CommonClassTest
 		$savSeller = array('idprof1' => $mysoc->idprof1, 'idprof2' => $mysoc->idprof2, 'tva_intra' => $mysoc->tva_intra, 'country_id' => $mysoc->country_id, 'country_code' => $mysoc->country_code);
 
 		try {
-			$document = $this->referencingDocument($reference);
+			$document = $this->referencingDocument($reference, $paidTypeCode);
 
 			$protocol = new CIIProtocol($db);
 			$result = $protocol->createSupplierInvoiceFromSource($document, 'reference.xml');
@@ -225,6 +241,32 @@ class SelfReferencedDocumentTest extends CommonClassTest
 		$this->assertEmpty($result['postponeflow'] ?? null, 'the flow is not postponed: ' . $result['message']);
 		$this->assertGreaterThan(0, (int) ($result['res'] ?? 0), 'the invoice is imported: ' . $result['message']);
 		$this->assertStringContainsString('NA', $result['message']);
+	}
+
+	/**
+	 * A credit note names the invoice it cancels, never a deposit: an amount already paid does not make it wait.
+	 *
+	 * @return void
+	 */
+	public function testAPaidCreditNoteWithAPlaceholderReferenceIsImported()
+	{
+		$result = $this->importReferencingDocument('NA', '381');
+
+		$this->assertEmpty($result['postponeflow'] ?? null, 'the flow is not postponed: ' . $result['message']);
+		$this->assertGreaterThan(0, (int) ($result['res'] ?? 0), 'the credit note is imported: ' . $result['message']);
+		$this->assertStringContainsString('credit note', $result['message']);
+	}
+
+	/**
+	 * An invoice declaring an amount already paid waits for the deposit it references (#880).
+	 *
+	 * @return void
+	 */
+	public function testAPaidInvoiceWaitsForItsMissingDeposit()
+	{
+		$result = $this->importReferencingDocument('EINV-MISSING-DEPOSIT', '380');
+
+		$this->assertSame(1, (int) ($result['postponeflow'] ?? 0), 'the flow is postponed: ' . $result['message']);
 	}
 
 	/**

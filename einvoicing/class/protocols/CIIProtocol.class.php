@@ -784,6 +784,7 @@ class CIIProtocol extends AbstractProtocol
 	 * nothing paid means the reference is documentary - a contract number, or the placeholder some
 	 * vendors always emit - and stepping over it costs nothing, as long as it is reported (#880).
 	 * ram:TypeCode cannot arbitrate this: CII-DT-018 forbids it below EXTENDED, so it is always absent.
+	 * A credit note is settled before BT-113 is read: its BG-3 is the invoice it cancels, never a deposit.
 	 *
 	 * @param  string					$refDoc           BT-25, the identifier of the referenced document
 	 * @param  array<string,mixed>		$parsedHeader     Parsed document header
@@ -798,6 +799,14 @@ class CIIProtocol extends AbstractProtocol
 		global $langs;
 
 		$documentno = (string) ($parsedHeader['documentno'] ?? '');
+
+		if ($this->getDolibarrInvoiceType($parsedHeader['documenttypecode'] ?? null) === CommonInvoice::TYPE_CREDIT_NOTE) {
+			if ($reportSkip) {
+				$return_messages[] = 'Document ' . dol_escape_htmltag((string) $refDoc) . ', ' . $relation . ' ' . dol_escape_htmltag($documentno) . ', was not found in Dolibarr and was ignored: the received document is a credit note, so the reference is the invoice it cancels, not a deposit to deduct.';
+			}
+			dol_syslog(get_class($this) . '::resolveMissingReferencedDocument Stepping over unresolved InvoiceReferencedDocument ref="' . $refDoc . '" (credit note) for ' . $documentno, LOG_DEBUG);
+			return null;
+		}
 
 		if ((float) ($parsedHeader['totalPrepaidAmount'] ?? 0) <= 0) {
 			if ($reportSkip) {
