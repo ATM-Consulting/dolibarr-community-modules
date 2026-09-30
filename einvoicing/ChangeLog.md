@@ -10,6 +10,7 @@ FIX: DA028865 [einvoicing] An invoice naming itself as the one it follows is imp
 FIX: DA028865 [einvoicing] A supplier Dolibarr refuses to update no longer stops the synchronization (cherry-pick of da24d284)
 FIX: DA028865 [einvoicing] A document referenced by a received line and unknown here no longer aborts the synchronization (cherry-pick of 7320fa2c, branch fix/line-linked-document-must-not-abort-import)
 FIX: DA028865 [einvoicing] Keep the document level charges of a received Factur-X (cherry-pick of cf87ca54, same branch)
+FIX: DA028865 [einvoicing] A placeholder invoice reference ("NA", "XXXX") on an invoice declaring nothing already paid no longer postpones the import (cherry-picks of 8a5f95b4 #884 and 3ca916d8 #880)
 
 
 ## 1.2.0

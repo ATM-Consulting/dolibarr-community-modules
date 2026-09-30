@@ -116,11 +116,12 @@ class SelfReferencedDocumentTest extends CommonClassTest
 	}
 
 	/**
-	 * Generate a CII document whose BG-3 repeats its own BT-1.
+	 * Generate a CII document carrying one BG-3 reference.
 	 *
-	 * @return string	The document
+	 * @param	string|null	$reference	BT-25 to write, null for the document's own BT-1
+	 * @return	string					The document
 	 */
-	private function selfReferencingDocument()
+	private function referencingDocument($reference = null)
 	{
 		global $db, $langs, $mysoc, $user;
 
@@ -158,17 +159,18 @@ class SelfReferencedDocumentTest extends CommonClassTest
 		$documentno = $xpath->query('/rsm:CrossIndustryInvoice/rsm:ExchangedDocument/ram:ID')->item(0)->textContent;
 		$settlement = $xpath->query('//ram:ApplicableHeaderTradeSettlement')->item(0);
 
-		$reference = $dom->createElementNS(self::RAM, 'ram:InvoiceReferencedDocument');
-		$reference->appendChild($dom->createElementNS(self::RAM, 'ram:IssuerAssignedID', $documentno));
-		$settlement->appendChild($reference);
+		$node = $dom->createElementNS(self::RAM, 'ram:InvoiceReferencedDocument');
+		$node->appendChild($dom->createElementNS(self::RAM, 'ram:IssuerAssignedID', $reference ?? $documentno));
+		$settlement->appendChild($node);
 
 		return (string) $dom->saveXML();
 	}
 
 	/**
-	 * @return void
+	 * @param	string|null	$reference	BT-25 to write, null for the document's own BT-1
+	 * @return	array<string,mixed>		What the import answered
 	 */
-	public function testASelfReferencingInvoiceIsImported()
+	private function importReferencingDocument($reference)
 	{
 		global $conf, $db, $mysoc, $user;
 
@@ -182,14 +184,13 @@ class SelfReferencedDocumentTest extends CommonClassTest
 		$savSeller = array('idprof1' => $mysoc->idprof1, 'idprof2' => $mysoc->idprof2, 'tva_intra' => $mysoc->tva_intra, 'country_id' => $mysoc->country_id, 'country_code' => $mysoc->country_code);
 
 		try {
-			$document = $this->selfReferencingDocument();
+			$document = $this->referencingDocument($reference);
 
 			$protocol = new CIIProtocol($db);
-			$result = $protocol->createSupplierInvoiceFromSource($document, 'self-reference.xml');
+			$result = $protocol->createSupplierInvoiceFromSource($document, 'reference.xml');
+			$result['message'] = (string) ($result['message'] ?? '') . ' ' . $protocol->error;
 
-			$this->assertEmpty($result['postponeflow'] ?? null, 'the flow is not postponed: ' . ($result['message'] ?? ''));
-			$this->assertGreaterThan(0, (int) ($result['res'] ?? 0), 'the invoice is imported: ' . ($result['message'] ?? '') . ' ' . $protocol->error);
-			$this->assertStringContainsString('names itself as the invoice it follows', (string) ($result['message'] ?? ''));
+			return $result;
 		} finally {
 			$user = $savUser;
 			$conf->global->EINVOICING_PDP = $savPdp;
@@ -198,6 +199,32 @@ class SelfReferencedDocumentTest extends CommonClassTest
 				$mysoc->$property = $value;
 			}
 		}
+	}
+
+	/**
+	 * @return void
+	 */
+	public function testASelfReferencingInvoiceIsImported()
+	{
+		$result = $this->importReferencingDocument(null);
+
+		$this->assertEmpty($result['postponeflow'] ?? null, 'the flow is not postponed: ' . $result['message']);
+		$this->assertGreaterThan(0, (int) ($result['res'] ?? 0), 'the invoice is imported: ' . $result['message']);
+		$this->assertStringContainsString('names itself as the invoice it follows', $result['message']);
+	}
+
+	/**
+	 * A placeholder reference on an invoice declaring nothing already paid does not hold the import (#880).
+	 *
+	 * @return void
+	 */
+	public function testAPlaceholderReferenceIsSteppedOver()
+	{
+		$result = $this->importReferencingDocument('NA');
+
+		$this->assertEmpty($result['postponeflow'] ?? null, 'the flow is not postponed: ' . $result['message']);
+		$this->assertGreaterThan(0, (int) ($result['res'] ?? 0), 'the invoice is imported: ' . $result['message']);
+		$this->assertStringContainsString('NA', $result['message']);
 	}
 
 	/**

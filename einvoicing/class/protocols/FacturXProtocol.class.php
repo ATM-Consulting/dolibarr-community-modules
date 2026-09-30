@@ -708,33 +708,17 @@ class FacturXProtocol extends CIIProtocol
 			foreach ($parsedHeader['invoiceRefDocs'] as $invoiceRefDoc) {
 				$refDoc = $invoiceRefDoc['IssuerAssignedID'] ?? null;
 				$dateDoc = $invoiceRefDoc['FormattedIssueDateTime'] ?? null;
-				$typeDoc = $invoiceRefDoc['TypeCode'] ?? null;
 
 				$refDocInvoiceId = SupplierInvoiceHelper::findIdByRef($refDoc, (int) $socId);
 				if ($refDocInvoiceId < 0) {
 					return ['res' => -1, 'message' => SupplierInvoiceHelper::refLookupErrorMessage($refDocInvoiceId, $refDoc, 'linked to document ' . ($parsedHeader['documentno'] ?? ''))];
 				}
 				if ($refDocInvoiceId == 0) {
-					// The invoice references a document this Dolibarr does not hold (deposit, credited or
-					// replaced invoice). Nothing has been created yet, so the flow is postponed rather than
-					// failed, and the message spells out what to create with a link to the creation screen.
-					$langs->load("bills");
-					$action = $langs->trans('CreateTheMissingSupplierInvoiceToImport', $refDoc);
-					$action .= ' <a class="butAction small smallpaddingimp nomarginleft" href="' . DOL_URL_ROOT . '/fourn/facture/card.php?action=create&socid=' . (int) $socId . '&ref_supplier=' . urlencode($refDoc) . '" target="_blank">';
-					$action .= '<i class="fas fa-plus-circle"></i> ';
-					$action .= $langs->trans('NewBill');
-					$action .= '</a>';
-
-					return [
-						'res' => -1,
-						'postponeflow' => 1,
-						'message' => 'Document : ' . $refDoc . ' linked to document ' . $parsedHeader['documentno'] . ' not found in Dolibarr',
-						'actioncode' => 'LINKED_INVOICE_NOT_FOUND',
-						'actionurl' => 'none',
-						'actiondata' => array('supplierref' => $refDoc, 'linkedref' => ($parsedHeader['documentno'] ?? ''), 'socid' => (int) $socId),
-						'action' => $action,
-						'businessmessage' => $langs->trans('CantFindLinkedInvoiceOfTheImportedInvoice', ($parsedHeader['documentno'] ?? ''), $refDoc)
-					];
+					$postpone = $this->resolveMissingReferencedDocument($refDoc, $parsedHeader, (int) $socId, 'linked to document', $return_messages);
+					if ($postpone !== null) {
+						return $postpone;
+					}
+					continue;
 				}
 			}
 		}
@@ -844,14 +828,20 @@ class FacturXProtocol extends CIIProtocol
 				foreach ($parsedHeader['invoiceRefDocs'] as $doc) {
 					$refDoc = $doc['IssuerAssignedID'] ?? null;
 					$dateDoc = $doc['FormattedIssueDateTime'] ?? null;
-					$typeDoc = $doc['TypeCode'] ?? null;
 
 					$linkedObjectId = SupplierInvoiceHelper::findIdByRef($refDoc, (int) $socId);
 					if ($linkedObjectId < 0) {
 						return ['res' => -1, 'message' => SupplierInvoiceHelper::refLookupErrorMessage($linkedObjectId, $refDoc, 'linked to document ' . ($parsedHeader['documentno'] ?? ''))];
 					}
 					if ($linkedObjectId == 0) {
-						return ['res' => -1, 'message' => 'Document : ' . $refDoc . ' linked to document ' . $parsedHeader['documentno'] . ' not found in Dolibarr'];
+						// The pre-check above already adjudicated every reference, so this is only reached if
+						// one disappeared in between. Answering the same way keeps a bare failure - which
+						// syncFlows() turns into "Aborting synchronization" - out of the post-creation path.
+						$postpone = $this->resolveMissingReferencedDocument($refDoc, $parsedHeader, (int) $socId, 'linked to document', $return_messages, false);
+						if ($postpone !== null) {
+							return $postpone;
+						}
+						continue;
 					}
 
 					// Fetch Object
