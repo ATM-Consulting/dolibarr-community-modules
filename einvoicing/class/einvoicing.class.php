@@ -1427,7 +1427,7 @@ class EInvoicing
 
 		// If current status requires a reason, display it
 		if (!empty($currentStatusInfo['reasonCode'])) {
-			$reasonLabel = self::REASONS[$currentStatusInfo['reasonCode']]['label'] ?? $currentStatusInfo['reasonCode'];
+			$reasonLabel = dol_escape_htmltag($langs->trans(self::REASONS[$currentStatusInfo['reasonCode']]['label'] ?? $currentStatusInfo['reasonCode']));
 			$resprints .= '<tr class="treinvoicing_collapseseparator" id="treinvoicing_reason">';
 			$resprints .= '<td class="">' . $langs->trans("einvoicingInvoiceReason") . '</td>';
 			$resprints .= '<td><span id="einvoice-reason">' . $reasonLabel . '</span></td>';
