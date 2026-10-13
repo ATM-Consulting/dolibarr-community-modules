@@ -63,10 +63,10 @@ $conf->global->MAIN_DISABLE_ALL_MAILS = 1;
 class GeneratedStatusTest extends CommonClassTest
 {
 	/** @var int Element id used by the records written here: high enough not to collide with a real invoice */
-	const TEST_ELEMENT_ID = 999999002;
+	public const TEST_ELEMENT_ID = 999999002;
 
 	/** @var string Ref used by the records and the file written here */
-	const TEST_REF = 'TEST-GEN-0001';
+	public const TEST_REF = 'TEST-GEN-0001';
 
 	/**
 	 * Start from a clean record, with the CII protocol so the file path is known.
@@ -108,7 +108,7 @@ class GeneratedStatusTest extends CommonClassTest
 	/**
 	 * @return Facture
 	 */
-	private function invoice()
+	private function buildInvoice()
 	{
 		global $db;
 
@@ -145,7 +145,7 @@ class GeneratedStatusTest extends CommonClassTest
 	/**
 	 * @return int
 	 */
-	private function storedStatus()
+	private function fetchStoredStatus()
 	{
 		global $db;
 
@@ -168,7 +168,7 @@ class GeneratedStatusTest extends CommonClassTest
 
 		$einvoicing = new EInvoicing($db);
 		$this->assertSame(EInvoicing::STATUS_GENERATED, $einvoicing->fetchLastknownInvoiceStatus(self::TEST_ELEMENT_ID, self::TEST_REF)['code']);
-		$this->assertSame(EInvoicing::STATUS_NOT_GENERATED, $this->storedStatus());
+		$this->assertSame(EInvoicing::STATUS_NOT_GENERATED, $this->fetchStoredStatus());
 	}
 
 	/**
@@ -183,8 +183,8 @@ class GeneratedStatusTest extends CommonClassTest
 		$this->storeStatus(EInvoicing::STATUS_NOT_GENERATED);
 		$this->writeEInvoiceFile();
 
-		$this->assertGreaterThan(0, (new EInvoicing($db))->markEInvoiceGenerated($this->invoice()));
-		$this->assertSame(EInvoicing::STATUS_GENERATED, $this->storedStatus());
+		$this->assertGreaterThan(0, (new EInvoicing($db))->markEInvoiceGenerated($this->buildInvoice()));
+		$this->assertSame(EInvoicing::STATUS_GENERATED, $this->fetchStoredStatus());
 	}
 
 	/**
@@ -196,8 +196,8 @@ class GeneratedStatusTest extends CommonClassTest
 
 		$this->writeEInvoiceFile();
 
-		$this->assertGreaterThan(0, (new EInvoicing($db))->markEInvoiceGenerated($this->invoice()));
-		$this->assertSame(EInvoicing::STATUS_GENERATED, $this->storedStatus());
+		$this->assertGreaterThan(0, (new EInvoicing($db))->markEInvoiceGenerated($this->buildInvoice()));
+		$this->assertSame(EInvoicing::STATUS_GENERATED, $this->fetchStoredStatus());
 	}
 
 	/**
@@ -212,7 +212,7 @@ class GeneratedStatusTest extends CommonClassTest
 		$this->storeStatus(EInvoicing::STATUS_AWAITING_ACK);
 		$this->writeEInvoiceFile();
 
-		$this->assertSame(0, (new EInvoicing($db))->markEInvoiceGenerated($this->invoice()));
-		$this->assertSame(EInvoicing::STATUS_AWAITING_ACK, $this->storedStatus());
+		$this->assertSame(0, (new EInvoicing($db))->markEInvoiceGenerated($this->buildInvoice()));
+		$this->assertSame(EInvoicing::STATUS_AWAITING_ACK, $this->fetchStoredStatus());
 	}
 }
