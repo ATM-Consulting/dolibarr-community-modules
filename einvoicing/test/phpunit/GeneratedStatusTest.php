@@ -82,6 +82,11 @@ class GeneratedStatusTest extends CommonClassTest
 		$conf->global->EINVOICING_PDP = 'SUPERPDP';
 		$conf->global->EINVOICING_PROTOCOL = 'CII';
 
+		// tearDown() deletes the directory of the e-invoice file: never let it resolve outside the invoice output dir.
+		if (empty($conf->invoice->multidir_output[$conf->entity])) {
+			$this->markTestSkipped('No invoice output directory for entity ' . $conf->entity);
+		}
+
 		$db->query("DELETE FROM " . $db->prefix() . "einvoicing_extlinks WHERE element_id = " . (int) self::TEST_ELEMENT_ID);
 	}
 
