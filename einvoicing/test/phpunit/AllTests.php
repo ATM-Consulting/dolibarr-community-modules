@@ -115,6 +115,8 @@ class AllTests
 		$suite->addTestSuite('CIIProtocolTest');
 		require_once dirname(__FILE__).'/EInvoicingSamplesTest.php';
 		$suite->addTestSuite('EInvoicingSamplesTest');
+		require_once dirname(__FILE__).'/GeneratedStatusTest.php';
+		$suite->addTestSuite('GeneratedStatusTest');
 		require_once dirname(__FILE__).'/PDPProviderManagerTest.php';
 		$suite->addTestSuite('PDPProviderManagerTest');
 		require_once dirname(__FILE__).'/RecipientDirectoryTest.php';
