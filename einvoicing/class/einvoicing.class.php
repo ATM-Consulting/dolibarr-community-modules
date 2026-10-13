@@ -1349,7 +1349,7 @@ class EInvoicing
 		// an e-invoice, instead of discovering a routing rejection (fr:213) only after transmission.
 		// Only for live mode, not for test mode (no directory check in test mode)
 		// Only for invoices not yet transmitted
-		if (($object->element == 'facture' || $object->element == 'invoice') && $action != 'create' && getDolGlobalInt('EINVOICING_PRECHECK_DIRECTORY', 1) && !empty(getDolGlobalString('EINVOICING_LIVE')) && empty($currentStatusInfo['transmitted'])) {
+		if (($object->element == 'facture' || $object->element == 'invoice') && $action != 'create' && getDolGlobalInt('EINVOICING_PRECHECK_DIRECTORY') && !empty(getDolGlobalString('EINVOICING_LIVE')) && empty($currentStatusInfo['transmitted'])) {
 			if (!is_object($object->thirdparty ?? null) && !empty($object->socid)) {
 				$object->fetch_thirdparty();
 			}
