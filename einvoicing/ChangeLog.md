@@ -1,5 +1,9 @@
 # CHANGELOG MODULE EINVOICING FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.5
+
+NEW: Add Hook "beforeEinvoiceXmlBuild" in generateXML() function for CII Protocol - BT-13.
+
 ## 1.0.4
 
 FIX: The module works on Dolibarr 17 again, the version its own descriptor declares as the minimum it

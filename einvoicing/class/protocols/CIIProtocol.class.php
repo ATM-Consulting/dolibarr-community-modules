@@ -514,6 +514,14 @@ class CIIProtocol extends AbstractProtocol
 		dol_mkdir(dirname($xmlfile));
 		dol_delete_file($xmlfile);
 
+		global $action, $hookmanager;
+		$hookmanager->initHooks(array('einvoicegeneration'));
+		$parameters = array('protocol' => 'cii', 'invoiceData' => &$invoiceData, 'linesData' => &$linesData, 'object' => $invoice, 'outputlangs' => $outputlangs);
+		$reshook = $hookmanager->executeHooks('beforeEinvoiceXmlBuild', $parameters, $this, $action);
+		if ($reshook < 0) {
+			throw new Exception(implode(', ', array_filter(array_merge(array($hookmanager->error), $hookmanager->errors))));
+		}
+
 		$xmlcontent = $this->buildXML($invoiceData, $linesData, $this->getBuildXmlProfile(), $outputlangs);
 
 		// Local EN 16931 business rules safety net, and check that the document claims the amount the
