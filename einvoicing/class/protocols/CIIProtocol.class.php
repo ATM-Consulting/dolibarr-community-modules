@@ -513,7 +513,7 @@ class CIIProtocol extends AbstractProtocol
 
 		dol_mkdir(dirname($xmlfile));
 		dol_delete_file($xmlfile);
-
+		/* BACKPORT : PR STD #1171 */
 		global $action, $hookmanager;
 		$hookmanager->initHooks(array('einvoicegeneration'));
 		$parameters = array('protocol' => 'cii', 'invoiceData' => &$invoiceData, 'linesData' => &$linesData, 'object' => $invoice, 'outputlangs' => $outputlangs);
@@ -521,6 +521,7 @@ class CIIProtocol extends AbstractProtocol
 		if ($reshook < 0) {
 			throw new Exception(implode(', ', array_filter(array_merge(array($hookmanager->error), $hookmanager->errors))));
 		}
+		/* BACKPORT : PR STD #1171 */
 
 		$xmlcontent = $this->buildXML($invoiceData, $linesData, $this->getBuildXmlProfile(), $outputlangs);
 
