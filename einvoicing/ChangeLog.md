@@ -8,8 +8,8 @@ FIX: The customer invoice list became very slow once the module was enabled. Its
 llx_einvoicing_extlinks on every query of the list, and that table, like llx_einvoicing_lifecycle_msg
 and llx_einvoicing_routing, had no index besides its primary key, so each invoice row triggered a full
 scan of it. Indexes are added on (element_id, element_type) for the first two and on fk_soc for the
-third. They are created when the module is enabled, so existing installations get them by disabling
-and re-enabling the module.
+third. They are created when the module is enabled, and existing installations get them on the next
+module reload or Dolibarr upgrade (update_v1.0.5.sql, dolibarr_allversions.sql).
 
 ## 1.0.4
 

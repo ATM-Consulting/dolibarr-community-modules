@@ -27,3 +27,9 @@ ALTER TABLE llx_einvoicing_call ALTER COLUMN entity SET DEFAULT 1;
 ALTER TABLE llx_einvoicing_extlinks ADD COLUMN ap_precheck_status varchar(50) DEFAULT NULL;
 
 ALTER TABLE llx_einvoicing_extlinks ADD COLUMN ap_precheck_result text DEFAULT NULL;
+
+ALTER TABLE llx_einvoicing_extlinks ADD INDEX idx_einvoicing_extlinks_element (element_id, element_type);
+
+ALTER TABLE llx_einvoicing_lifecycle_msg ADD INDEX idx_einvoicing_lcmsg_element (element_id, element_type);
+
+ALTER TABLE llx_einvoicing_routing ADD INDEX idx_einvoicing_routing_fk_soc (fk_soc);
