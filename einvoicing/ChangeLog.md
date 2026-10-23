@@ -4,6 +4,13 @@
 
 NEW: Add Hook "beforeEinvoiceXmlBuild" in generateXML() function for CII Protocol - BT-13.
 
+FIX: The customer invoice list became very slow once the module was enabled. Its hooks join
+llx_einvoicing_extlinks on every query of the list, and that table, like llx_einvoicing_lifecycle_msg
+and llx_einvoicing_routing, had no index besides its primary key, so each invoice row triggered a full
+scan of it. Indexes are added on (element_id, element_type) for the first two and on fk_soc for the
+third. They are created when the module is enabled, so existing installations get them by disabling
+and re-enabling the module.
+
 ## 1.0.4
 
 FIX: The module works on Dolibarr 17 again, the version its own descriptor declares as the minimum it
