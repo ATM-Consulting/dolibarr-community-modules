@@ -2044,11 +2044,13 @@ class EInvoicing
 	/**
 	 * fetchLastknownInvoiceStatus
 	 *
+	 * BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - START
 	 * 'code' is the status to SHOW: it is corrected from what is on disk, so a document generated
 	 * before the module wrote its status still reads as generated. 'storedcode' is the status the
 	 * table really holds, untouched by that correction - what a caller deciding whether to persist
 	 * a new status has to look at, otherwise the correction hides the very row it should update
 	 * (issue #998).
+	 * BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - END
 	 *
 	 * @param int			$invoiceId		Invoice ID
 	 * @param ?string		$invoiceRef		Invoice ref
@@ -2062,7 +2064,9 @@ class EInvoicing
 		$status = array(
 			'rowid' => 0,
 			'code' => self::STATUS_UNKNOWN,
+			// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - START
 			'storedcode' => self::STATUS_UNKNOWN,
+			// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - END
 			'status' => $this->getStatusLabel(self::STATUS_UNKNOWN),
 			'info' => '',
 			'file' => '0',
@@ -2103,7 +2107,9 @@ class EInvoicing
 					if (empty($tmpstatus)) {	// If not found yet
 						$tmpstatus['rowid'] = (int) $obj->rowid;
 						$tmpstatus['code'] = (int) $obj->syncstatus;
+						// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - START
 						$tmpstatus['storedcode'] = (int) $obj->syncstatus;
+						// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - END
 						$tmpstatus['status'] = $this->getStatusLabel((int) $obj->syncstatus);
 						$tmpstatus['info'] = $obj->synccomment ?? '';
 						$tmpstatus['flow_id'] = $obj->flow_id ?? '';
@@ -2127,7 +2133,9 @@ class EInvoicing
 
 				$tmpstatus['rowid'] = (int) $obj->rowid;
 				$tmpstatus['code'] = (int) $obj->syncstatus;
+				// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - START
 				$tmpstatus['storedcode'] = (int) $obj->syncstatus;
+				// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - END
 				$tmpstatus['status'] = $this->getStatusLabel((int) $obj->syncstatus);
 				$tmpstatus['info'] = $obj->synccomment ?? '';
 				$tmpstatus['flow_id'] = $obj->flow_id ?? '';
@@ -2177,8 +2185,10 @@ class EInvoicing
 		}
 		$this->db->free($resql);
 
+		// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - START
 		// Check if there is an e-invoice file generated on disk.
 		// What follows corrects 'code' for display only: 'storedcode' keeps the value of the table.
+		// BACKPORT 6f598e67 FIX: [einvoicing] The status of a generated e-invoice is really stored - END
 
 		$einvoicefilepath = $this->getEInvoiceFilePath($invoiceRef);
 		if ($einvoicefilepath && is_readable($einvoicefilepath)) {
