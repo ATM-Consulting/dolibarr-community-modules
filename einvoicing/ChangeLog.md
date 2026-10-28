@@ -9,6 +9,13 @@ failing to copy the generated XML there. Backport of upstream FIX #1097.
 
 ## 1.0.4
 
+FIX: The recipient directory check (EINVOICING_PRECHECK_DIRECTORY) is off by default, as the setup screen
+shows it. Instances that never saved the option no longer get the directory line nor its automatic lookup on
+the invoice card. (T6842)
+
+FIX: The "Generated" e-invoice status is stored after generation instead of being only deduced from the file,
+so the list no longer shows "To generate" for an invoice whose e-invoice exists. (T6842)
+
 FIX: The module works on Dolibarr 17 again, the version its own descriptor declares as the minimum it
 supports. Two things stood in the way and neither of them failed quietly. Installing it died on a PHP
 TypeError: init() passed an empty array() where ExtraFields::update() expects a parameter string, and
