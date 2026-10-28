@@ -2,6 +2,11 @@
 
 ## 1.0.5
 
+- FIX : MONK-368 - BACKPORT 6f598e67 - Status of a generated e-invoice stayed "Not generated" in database - *27/10/2026* - 1.0.5
+ + On upgrade: invoices already stuck at "Not generated" are fixed by clicking "Regenerate e-invoice" on each of them.
+ + fetchLastknownInvoiceStatus() shows GENERATED as soon as the file is on disk, and both protocols read that corrected code to decide whether to store GENERATED, so syncstatus was never updated (backport of upstream commit 6f598e67 "FIX: [einvoicing] The status of a generated e-invoice is really stored", issue #998).
+ + The status now carries 'storedcode', the value really held by einvoicing_extlinks, and the protocols decide on it.
+
 NEW: Add Hook "beforeEinvoiceXmlBuild" in generateXML() function for CII Protocol - BT-13.
 
 FIX: The CII protocol creates the invoice output directory when it does not exist yet, instead of
