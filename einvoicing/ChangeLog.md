@@ -4,6 +4,9 @@
 
 NEW: Add Hook "beforeEinvoiceXmlBuild" in generateXML() function for CII Protocol - BT-13.
 
+FIX: The CII protocol creates the invoice output directory when it does not exist yet, instead of
+failing to copy the generated XML there. Backport of upstream FIX #1097.
+
 ## 1.0.4
 
 FIX: The module works on Dolibarr 17 again, the version its own descriptor declares as the minimum it
