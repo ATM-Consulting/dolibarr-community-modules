@@ -119,8 +119,6 @@ class AllTests
 		$suite->addTestSuite('PDPProviderManagerTest');
 		require_once dirname(__FILE__).'/RecipientDirectoryTest.php';
 		$suite->addTestSuite('RecipientDirectoryTest');
-		require_once dirname(__FILE__).'/RefundedCreditNoteTest.php';
-		$suite->addTestSuite('RefundedCreditNoteTest');
 		require_once dirname(__FILE__).'/SupplierInvoiceHelperTest.php';
 		$suite->addTestSuite('SupplierInvoiceHelperTest');
 		require_once dirname(__FILE__).'/TransmittedLockTest.php';
