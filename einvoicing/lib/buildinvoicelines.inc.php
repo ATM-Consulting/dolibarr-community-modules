@@ -729,6 +729,15 @@ if ($resql) {
 // value into $object->sumpayed, so adding both double-counted the payment (#372: a fully paid
 // invoice reported TotalPrepaidAmount = 2x the amount and a negative DuePayableAmount).
 $getAlreadyPaid = $object->getSommePaiement();
+// Error is the int -1, a refund of 1.00 is the float -1.0.
+if ($getAlreadyPaid === -1) {
+	dol_syslog("Error " . $object->error . " when reading payments to calculate prepaid amount for invoice " . $object->id, LOG_WARNING);
+	$getAlreadyPaid = 0;
+}
+// A refund of a credit note is stored negative while the document amounts are positive (EN16931).
+if ($object->type == $object::TYPE_CREDIT_NOTE) {
+	$getAlreadyPaid = abs((float) $getAlreadyPaid);
+}
 
 $prepaidAmount  = $getAlreadyPaid + $usedcreditnoteamount;
 

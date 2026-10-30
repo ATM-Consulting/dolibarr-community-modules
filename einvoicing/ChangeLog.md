@@ -1,5 +1,12 @@
 # CHANGELOG MODULE EINVOICING FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.0.6
+
+- FIX : MONK-371 - Refunded credit note declared twice its amount as due in the e-invoice - *30/10/2026* - 1.0.6
+ + The refund of a credit note is stored negative by Dolibarr while the document amounts are positive: BT-113 read -35.34 and BT-115 read 70.68 instead of 35.34 and 0.
+ + The billing frame (BT-23) compares the amount already paid and the total without their sign, so a refunded credit note stays in the already-paid frame (B2/S2/M2) with BT-115 = 0, as BR-FR-CO-09 requires.
+ + Not fixed on upstream main: since 7ff4af52 a negative payment sum is ignored there, which gives BT-115 = full amount on a refunded credit note.
+
 ## 1.0.5
 
 - FIX : MONK-368 - BACKPORT 6f598e67 - Status of a generated e-invoice stayed "Not generated" in database - *27/10/2026* - 1.0.5
