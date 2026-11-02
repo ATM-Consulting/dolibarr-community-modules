@@ -7,6 +7,10 @@
  + fetchLastknownInvoiceStatus() shows GENERATED as soon as the file is on disk, and both protocols read that corrected code to decide whether to store GENERATED, so syncstatus was never updated (backport of upstream commit 6f598e67 "FIX: [einvoicing] The status of a generated e-invoice is really stored", issue #998).
  + The status now carries 'storedcode', the value really held by einvoicing_extlinks, and the protocols decide on it.
 
+FIX: The "Remote check the recipient reachability in the directory" option can be switched off again:
+the recipient reachability line no longer shows on the invoice card once it is disabled. The option is now
+off by default. Backport of upstream commit a55c84eb.
+
 NEW: Add Hook "beforeEinvoiceXmlBuild" in generateXML() function for CII Protocol - BT-13.
 
 FIX: The CII protocol creates the invoice output directory when it does not exist yet, instead of
