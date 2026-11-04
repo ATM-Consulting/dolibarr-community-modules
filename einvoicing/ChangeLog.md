@@ -2,6 +2,7 @@
 
 ## 1.0.5
 
+- FIX : MONK-371 - BACKPORT #1220 - A refunded credit note declared its refund as a positive prepaid amount instead of nothing left due - *04/11/2026* - 1.0.5
 - FIX : MONK-368 - BACKPORT 6f598e67 - Status of a generated e-invoice stayed "Not generated" in database - *27/10/2026* - 1.0.5
  + On upgrade: invoices already stuck at "Not generated" are fixed by clicking "Regenerate e-invoice" on each of them.
  + fetchLastknownInvoiceStatus() shows GENERATED as soon as the file is on disk, and both protocols read that corrected code to decide whether to store GENERATED, so syncstatus was never updated (backport of upstream commit 6f598e67 "FIX: [einvoicing] The status of a generated e-invoice is really stored", issue #998).

@@ -119,6 +119,7 @@ trait CommonProtocol
 		// while claiming the full amount was due, and was rejected. Claim the frame only when the
 		// amount the document will actually carry in BT-113 covers the total.
 		$totalTtc = (float) price2num($invoice->total_ttc, 'MT');
+		// BACKPORT #1220 FIX: [einvoicing] A refunded credit note declares nothing left due - START
 		if ($alreadyPaid === null) {
 			// The error is the int -1, a refund of 1.00 the float -1.0.
 			$alreadyPaid = $invoice->getSommePaiement();
@@ -131,6 +132,7 @@ trait CommonProtocol
 		}
 		// Credit note: total is negative in Dolibarr, BT-113 is positive in the document.
 		$isFullyPaid = ($totalTtc != 0.0 && abs(abs((float) $alreadyPaid) - abs($totalTtc)) < 0.005);
+		// BACKPORT #1220 FIX: [einvoicing] A refunded credit note declares nothing left due - END
 
 		if ($invoice->status == Facture::STATUS_CLOSED && empty($invoice->close_code) && $isFullyPaid) {
 			return $prefix . '2';
