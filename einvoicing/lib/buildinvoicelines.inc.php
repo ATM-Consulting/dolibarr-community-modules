@@ -730,6 +730,12 @@ if ($resql) {
 // invoice reported TotalPrepaidAmount = 2x the amount and a negative DuePayableAmount).
 $getAlreadyPaid = $object->getSommePaiement();
 
+// A refund of a credit note is stored negative while the document amounts are positive (EN16931).
+// The error is the int -1, a refund of 1.00 the float -1.0.
+if ($object->type == $object::TYPE_CREDIT_NOTE && is_float($getAlreadyPaid)) {
+	$getAlreadyPaid = abs($getAlreadyPaid);
+}
+
 $prepaidAmount  = $getAlreadyPaid + $usedcreditnoteamount;
 
 // Delivery date
