@@ -1091,6 +1091,7 @@ class ActionsEInvoicing extends CommonHookActions  // @phan-suppress-current-lin
 			if (in_array('thirdpartylist', $contexts, true)) {
 				$this->resprints .= ' LEFT JOIN ' . $db->prefix() . "einvoicing_extlinks as ext ON ext.element_id = s.rowid AND ext.element_type = 'societe'";
 				$this->resprints .= ' LEFT JOIN ' . $db->prefix() . "einvoicing_routing rt ON rt.fk_soc = s.rowid";
+				// BACKPORT #680 FIX: [einvoicing] The join on einvoicing_routing stops repeating the thirdparties of the list - START
 				// A thirdparty can hold several routing identifiers, and a routing row for its default product
 				// on top of them, so joining on fk_soc alone repeats the thirdparty in the list as many times.
 				// The active default routing of type 'thirdparty' is the single row the list must show: it is
@@ -1098,6 +1099,7 @@ class ActionsEInvoicing extends CommonHookActions  // @phan-suppress-current-lin
 				// EInvoicing::fetchDefaultRouting() answers. The column stays empty for a thirdparty holding
 				// no routing identifier, so no row leaves the list.
 				$this->resprints .= " AND rt.routing_type = 'thirdparty' AND rt.active = 1 AND rt.is_default = 1";
+				// BACKPORT #680 FIX: [einvoicing] The join on einvoicing_routing stops repeating the thirdparties of the list - END
 			}
 
 			if (in_array('supplierinvoicelist', $contexts, true)) {
